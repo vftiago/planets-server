@@ -96,8 +96,6 @@ func (r *PlayerRepository) CreatePlayer(username, email, displayName string, ava
 }
 
 func (r *PlayerRepository) FindOrCreatePlayerByOAuth(provider, providerUserID, email, displayName string, avatarURL *string) (*Player, error) {
-	fmt.Printf("DEBUG: OAuth login - provider=%s, providerUserID=%s, email=%s\n", provider, providerUserID, email)
-	
 	// Check if this exact provider + userID combo already exists
 	query := `
 		SELECT p.id, p.username, p.email, p.display_name, p.avatar_url, p.created_at, p.updated_at
@@ -113,7 +111,6 @@ func (r *PlayerRepository) FindOrCreatePlayerByOAuth(provider, providerUserID, e
 	)
 	
 	if err == nil {
-		fmt.Printf("DEBUG: Found existing player ID=%d for this provider\n", player.ID)
 		return &player, nil
 	}
 	
@@ -133,10 +130,7 @@ func (r *PlayerRepository) FindOrCreatePlayerByOAuth(provider, providerUserID, e
 		&player.AvatarURL, &player.CreatedAt, &player.UpdatedAt,
 	)
 	
-	if err == nil {
-		// Found existing player with same email - link this auth provider
-		fmt.Printf("DEBUG: Found existing player ID=%d with same email, linking auth provider\n", player.ID)
-		
+	if err == nil {	
 		authQuery := `
 			INSERT INTO player_auth_providers (player_id, provider, provider_user_id, provider_email)
 			VALUES ($1, $2, $3, $4)
@@ -147,7 +141,6 @@ func (r *PlayerRepository) FindOrCreatePlayerByOAuth(provider, providerUserID, e
 			return nil, fmt.Errorf("failed to link auth provider: %w", err)
 		}
 		
-		fmt.Printf("DEBUG: Successfully linked %s provider to existing player\n", provider)
 		return &player, nil
 	}
 	
@@ -155,13 +148,12 @@ func (r *PlayerRepository) FindOrCreatePlayerByOAuth(provider, providerUserID, e
 		return nil, err // Database error
 	}
 	
-	// No existing player found, create new one
-	fmt.Printf("DEBUG: Creating new player for email=%s\n", email)
-	
+	// No existing player found, create new one	
 	tx, err := r.db.Begin()
 	if err != nil {
 		return nil, err
 	}
+
 	defer tx.Rollback()
 	
 	username := generateUsernameFromEmail(email)
@@ -194,7 +186,6 @@ func (r *PlayerRepository) FindOrCreatePlayerByOAuth(provider, providerUserID, e
 		return nil, err
 	}
 	
-	fmt.Printf("DEBUG: Created new player ID=%d\n", player.ID)
 	return &player, nil
 }
 

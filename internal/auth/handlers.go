@@ -48,8 +48,6 @@ func (s *OAuthService) HandleGoogleCallback(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	fmt.Printf("DEBUG Google userInfo: ID='%s', Email='%s', Name='%s'\n", userInfo.ID, userInfo.Email, userInfo.Name)
-
 	// Create/find player
 	player, err := s.playerRepo.FindOrCreatePlayerByOAuth(
 		"google",
@@ -70,10 +68,19 @@ func (s *OAuthService) HandleGoogleCallback(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Redirect to frontend with token
+	// Set HttpOnly cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "auth_token",
+		Value:    jwtToken,
+		HttpOnly: true,
+		Secure:   utils.GetEnv("ENVIRONMENT", "development") == "production",
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/",
+		MaxAge:   86400, // 24 hours
+	})
+
 	frontendURL := utils.GetEnv("FRONTEND_URL", "http://localhost:3000")
-	redirectURL := fmt.Sprintf("%s/auth/callback?token=%s", frontendURL, jwtToken)
-	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
+	http.Redirect(w, r, frontendURL+"/auth/callback", http.StatusTemporaryRedirect)
 }
 
 // GitHub OAuth initiation
@@ -124,10 +131,19 @@ func (s *OAuthService) HandleGitHubCallback(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Redirect to frontend with token
+	// Set HttpOnly cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "auth_token",
+		Value:    jwtToken,
+		HttpOnly: true,
+		Secure:   utils.GetEnv("ENVIRONMENT", "development") == "production",
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/",
+		MaxAge:   86400, // 24 hours
+	})
+
 	frontendURL := utils.GetEnv("FRONTEND_URL", "http://localhost:3000")
-	redirectURL := fmt.Sprintf("%s/auth/callback?token=%s", frontendURL, jwtToken)
-	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
+	http.Redirect(w, r, frontendURL+"/auth/callback", http.StatusTemporaryRedirect)
 }
 
 // Google user info structure

@@ -70,12 +70,14 @@ func main() {
 	mux.HandleFunc("/api/health", healthHandler)
 	mux.HandleFunc("/api/game/status", gameStatusHandler)
 	mux.HandleFunc("/api/players", playersHandler)
+	mux.Handle("/api/me", middleware.JWTMiddleware(http.HandlerFunc(meHandler))) // Protected route
 
 	// OAuth endpoints
 	mux.HandleFunc("/auth/google", oauthService.HandleGoogleAuth)
 	mux.HandleFunc("/auth/google/callback", oauthService.HandleGoogleCallback)
 	mux.HandleFunc("/auth/github", oauthService.HandleGitHubAuth)
 	mux.HandleFunc("/auth/github/callback", oauthService.HandleGitHubCallback)
+	mux.HandleFunc("/auth/logout", logoutHandler)
 
 	// Wrap mux with CORS middleware
 	handler := corsMiddleware.Handler(mux)
@@ -130,4 +132,34 @@ func playersHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	json.NewEncoder(w).Encode(players)
+}
+
+func meHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	
+	claims := r.Context().Value("user").(*auth.Claims)
+	
+	response := map[string]interface{}{
+		"player_id": claims.PlayerID,
+		"username":  claims.Username,
+		"email":     claims.Email,
+	}
+	
+	json.NewEncoder(w).Encode(response)
+}
+
+func logoutHandler(w http.ResponseWriter, r *http.Request) {
+	// Clear the cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "auth_token",
+		Value:    "",
+		HttpOnly: true,
+		Secure:   utils.GetEnv("ENVIRONMENT", "development") == "production",
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/",
+		MaxAge:   -1, // Expire immediately
+	})
+	
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Logged out"))
 }
