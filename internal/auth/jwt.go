@@ -2,10 +2,10 @@ package auth
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"planets-server/internal/models"
-	"planets-server/internal/utils"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -17,8 +17,22 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
+func getJWTSecret() (string, error) {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		return "", fmt.Errorf("JWT_SECRET environment variable is required but not set")
+	}
+	if len(secret) < 32 {
+		return "", fmt.Errorf("JWT_SECRET must be at least 32 characters long for security")
+	}
+	return secret, nil
+}
+
 func GenerateJWT(player *models.Player) (string, error) {
-	secret := utils.GetEnv("JWT_SECRET", "dev-secret-key-change-in-production")
+	secret, err := getJWTSecret()
+	if err != nil {
+		return "", fmt.Errorf("cannot generate JWT: %w", err)
+	}
 	
 	claims := Claims{
 		PlayerID: player.ID,
@@ -36,7 +50,10 @@ func GenerateJWT(player *models.Player) (string, error) {
 }
 
 func ValidateJWT(tokenString string) (*Claims, error) {
-	secret := utils.GetEnv("JWT_SECRET", "dev-secret-key-change-in-production")
+	secret, err := getJWTSecret()
+	if err != nil {
+		return nil, fmt.Errorf("cannot validate JWT: %w", err)
+	}
 	
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
