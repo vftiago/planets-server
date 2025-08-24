@@ -2,9 +2,13 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"time"
 
 	"planets-server/internal/models"
 	"planets-server/internal/utils"
@@ -20,35 +24,169 @@ func NewOAuthService(playerRepo *models.PlayerRepository) *OAuthService {
 	return &OAuthService{playerRepo: playerRepo}
 }
 
+type ErrorResponse struct {
+	Error   string `json:"error"`
+	Message string `json:"message"`
+	Code    int    `json:"code"`
+}
+
+func sendErrorResponse(w http.ResponseWriter, statusCode int, errorType, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	
+	errorResp := ErrorResponse{
+		Error:   errorType,
+		Message: message,
+		Code:    statusCode,
+	}
+	
+	if err := json.NewEncoder(w).Encode(errorResp); err != nil {
+		slog.Error("Failed to encode error response", 
+			"error", err,
+			"status_code", statusCode,
+			"error_type", errorType)
+	}
+}
+
+func redirectWithError(w http.ResponseWriter, r *http.Request, errorType, message string) {
+	frontendURL := utils.GetEnv("FRONTEND_URL", "http://localhost:3000")
+	errorURL := fmt.Sprintf("%s/auth/error?error=%s&message=%s", 
+		frontendURL, errorType, message)
+	
+	slog.Debug("Redirecting to frontend with error",
+		"frontend_url", frontendURL,
+		"error_type", errorType,
+		"message", message)
+	
+	http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
+}
+
+func generateStateToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("failed to generate random state token: %w", err)
+	}
+	
+	return base64.URLEncoding.EncodeToString(b), nil
+}
+
 // Google OAuth initiation
 func (s *OAuthService) HandleGoogleAuth(w http.ResponseWriter, r *http.Request) {
-	url := GoogleOAuthConfig.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
+	logger := slog.With(
+		"handler", "google_oauth_init",
+		"user_agent", r.UserAgent(),
+		"ip", r.RemoteAddr,
+	)
+	
+	// Validate that OAuth is properly configured
+	if GoogleOAuthConfig.ClientID == "" || GoogleOAuthConfig.ClientSecret == "" {
+		logger.Error("Google OAuth not configured - missing client credentials")
+		sendErrorResponse(w, http.StatusServiceUnavailable, 
+			"oauth_not_configured", "Google OAuth is not properly configured")
+		return
+	}
+
+	// Generate secure state token for CSRF protection
+	state, err := generateStateToken()
+	if err != nil {
+		logger.Error("Failed to generate state token", "error", err)
+		sendErrorResponse(w, http.StatusInternalServerError,
+			"internal_error", "Failed to initialize OAuth flow")
+		return
+	}
+	
+	// TODO: Store state in session/cache for validation
+	url := GoogleOAuthConfig.AuthCodeURL(state, oauth2.AccessTypeOffline)
+	
+	logger.Info("Initiating Google OAuth flow", 
+		"redirect_url", url,
+		"state_length", len(state))
+	
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
 // Google OAuth callback
 func (s *OAuthService) HandleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
-	if code == "" {
-		http.Error(w, "No authorization code", http.StatusBadRequest)
+	state := r.URL.Query().Get("state")
+	errorParam := r.URL.Query().Get("error")
+	
+	// Create logger with request context
+	logger := slog.With(
+		"handler", "google_oauth_callback",
+		"user_agent", r.UserAgent(),
+		"ip", r.RemoteAddr,
+		"has_code", code != "",
+		"has_state", state != "",
+	)
+	
+	// Check if user denied authorization
+	if errorParam != "" {
+		logger.Warn("Google OAuth authorization denied",
+			"oauth_error", errorParam,
+			"error_description", r.URL.Query().Get("error_description"))
+		redirectWithError(w, r, "oauth_denied", "Authorization was denied")
 		return
 	}
+	
+	// Validate authorization code
+	if code == "" {
+		logger.Error("Google OAuth callback missing authorization code")
+		redirectWithError(w, r, "oauth_error", "Missing authorization code")
+		return
+	}
+	
+	// Validate state token (CSRF protection)
+	if state == "" {
+		logger.Error("Google OAuth callback missing state parameter")
+		redirectWithError(w, r, "oauth_error", "Invalid request state")
+		return
+	}
+	
+	// TODO: Validate state token against stored value for better security
+	
+	logger.Info("Processing Google OAuth callback")
 
-	// Exchange code for token
-	token, err := GoogleOAuthConfig.Exchange(context.Background(), code)
+	// Exchange code for token with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30 * time.Second)
+	defer cancel()
+	
+	logger.Debug("Exchanging authorization code for Google access token")
+	token, err := GoogleOAuthConfig.Exchange(ctx, code)
 	if err != nil {
-		http.Error(w, "Failed to exchange token", http.StatusInternalServerError)
+		logger.Error("Failed to exchange Google authorization code",
+			"error", err,
+			"provider", "google")
+		redirectWithError(w, r, "oauth_error", "Failed to exchange authorization code")
 		return
 	}
 
 	// Get user info from Google
-	userInfo, err := s.getGoogleUserInfo(token)
+	logger.Debug("Fetching user information from Google API")
+	userInfo, err := s.getGoogleUserInfo(ctx, token)
 	if err != nil {
-		http.Error(w, "Failed to get user info", http.StatusInternalServerError)
+		logger.Error("Failed to get user info from Google",
+			"error", err,
+			"provider", "google")
+		redirectWithError(w, r, "oauth_error", "Failed to retrieve user information")
+		return
+	}
+	
+	// Add user context to logger
+	userLogger := logger.With(
+		"user_email", userInfo.Email,
+		"google_user_id", userInfo.ID,
+		"user_name", userInfo.Name)
+	
+	// Validate required user info
+	if userInfo.Email == "" {
+		userLogger.Error("Google user info missing required email field")
+		redirectWithError(w, r, "oauth_error", "Email address is required")
 		return
 	}
 
 	// Create/find player
+	userLogger.Info("Creating or finding player account for Google user")
 	player, err := s.playerRepo.FindOrCreatePlayerByOAuth(
 		"google",
 		userInfo.ID,
@@ -57,61 +195,165 @@ func (s *OAuthService) HandleGoogleCallback(w http.ResponseWriter, r *http.Reque
 		&userInfo.Picture,
 	)
 	if err != nil {
-		http.Error(w, "Failed to create/find player", http.StatusInternalServerError)
+		userLogger.Error("Failed to create or find player account",
+			"error", err,
+			"provider", "google")
+		redirectWithError(w, r, "database_error", "Failed to create user account")
 		return
 	}
 
+	// Add player context to logger
+	playerLogger := userLogger.With("player_id", player.ID)
+
 	// Generate JWT
+	playerLogger.Debug("Generating JWT token for player")
 	jwtToken, err := GenerateJWT(player)
 	if err != nil {
-		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+		playerLogger.Error("Failed to generate JWT token",
+			"error", err)
+		redirectWithError(w, r, "auth_error", "Failed to create authentication token")
 		return
 	}
 
 	// Set HttpOnly cookie
+	isProduction := utils.GetEnv("ENVIRONMENT", "development") == "production"
 	http.SetCookie(w, &http.Cookie{
 		Name:     "auth_token",
 		Value:    jwtToken,
 		HttpOnly: true,
-		Secure:   utils.GetEnv("ENVIRONMENT", "development") == "production",
+		Secure:   isProduction,
 		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 		MaxAge:   86400, // 24 hours
 	})
 
+	// Check if this is a newly created player (rough approximation)
+	isNewPlayer := time.Since(player.CreatedAt) < time.Minute
+	
+	playerLogger.Info("Google OAuth authentication successful",
+		"provider", "google",
+		"new_player", isNewPlayer,
+		"player_username", player.Username)
+	
 	frontendURL := utils.GetEnv("FRONTEND_URL", "http://localhost:3000")
-	http.Redirect(w, r, frontendURL+"/auth/callback", http.StatusTemporaryRedirect)
+	successURL := fmt.Sprintf("%s/auth/callback?success=true", frontendURL)
+	http.Redirect(w, r, successURL, http.StatusTemporaryRedirect)
 }
 
 // GitHub OAuth initiation
 func (s *OAuthService) HandleGitHubAuth(w http.ResponseWriter, r *http.Request) {
-	url := GitHubOAuthConfig.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
+	logger := slog.With(
+		"handler", "github_oauth_init",
+		"user_agent", r.UserAgent(),
+		"ip", r.RemoteAddr,
+	)
+	
+	// Validate that OAuth is properly configured
+	if GitHubOAuthConfig.ClientID == "" || GitHubOAuthConfig.ClientSecret == "" {
+		logger.Error("GitHub OAuth not configured - missing client credentials")
+		sendErrorResponse(w, http.StatusServiceUnavailable, 
+			"oauth_not_configured", "GitHub OAuth is not properly configured")
+		return
+	}
+
+	// Generate secure state token for CSRF protection
+	state, err := generateStateToken()
+	if err != nil {
+		logger.Error("Failed to generate state token", "error", err)
+		sendErrorResponse(w, http.StatusInternalServerError,
+			"internal_error", "Failed to initialize OAuth flow")
+		return
+	}
+	
+	url := GitHubOAuthConfig.AuthCodeURL(state, oauth2.AccessTypeOffline)
+	
+	logger.Info("Initiating GitHub OAuth flow", 
+		"redirect_url", url,
+		"state_length", len(state))
+	
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
 // GitHub OAuth callback
 func (s *OAuthService) HandleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
+	state := r.URL.Query().Get("state")
+	errorParam := r.URL.Query().Get("error")
+	
+	// Create logger with request context
+	logger := slog.With(
+		"handler", "github_oauth_callback",
+		"user_agent", r.UserAgent(),
+		"ip", r.RemoteAddr,
+		"has_code", code != "",
+		"has_state", state != "",
+	)
+	
+	// Check if user denied authorization
+	if errorParam != "" {
+		logger.Warn("GitHub OAuth authorization denied",
+			"oauth_error", errorParam,
+			"error_description", r.URL.Query().Get("error_description"))
+		redirectWithError(w, r, "oauth_denied", "Authorization was denied")
+		return
+	}
+	
+	// Validate authorization code
 	if code == "" {
-		http.Error(w, "No authorization code", http.StatusBadRequest)
+		logger.Error("GitHub OAuth callback missing authorization code")
+		redirectWithError(w, r, "oauth_error", "Missing authorization code")
+		return
+	}
+	
+	// Validate state token (CSRF protection)
+	if state == "" {
+		logger.Error("GitHub OAuth callback missing state parameter")
+		redirectWithError(w, r, "oauth_error", "Invalid request state")
 		return
 	}
 
-	// Exchange code for token
-	token, err := GitHubOAuthConfig.Exchange(context.Background(), code)
+	logger.Info("Processing GitHub OAuth callback")
+
+	// Exchange code for token with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	
+	logger.Debug("Exchanging authorization code for GitHub access token")
+	token, err := GitHubOAuthConfig.Exchange(ctx, code)
 	if err != nil {
-		http.Error(w, "Failed to exchange token", http.StatusInternalServerError)
+		logger.Error("Failed to exchange GitHub authorization code",
+			"error", err,
+			"provider", "github")
+		redirectWithError(w, r, "oauth_error", "Failed to exchange authorization code")
 		return
 	}
 
 	// Get user info from GitHub
-	userInfo, err := s.getGitHubUserInfo(token)
+	logger.Debug("Fetching user information from GitHub API")
+	userInfo, err := s.getGitHubUserInfo(ctx, token)
 	if err != nil {
-		http.Error(w, "Failed to get user info", http.StatusInternalServerError)
+		logger.Error("Failed to get user info from GitHub",
+			"error", err,
+			"provider", "github")
+		redirectWithError(w, r, "oauth_error", "Failed to retrieve user information")
+		return
+	}
+	
+	// Add user context to logger
+	userLogger := logger.With(
+		"user_email", userInfo.Email,
+		"github_user_id", userInfo.ID,
+		"user_name", userInfo.Name)
+	
+	// Validate required user info
+	if userInfo.Email == "" {
+		userLogger.Error("GitHub user info missing required email field")
+		redirectWithError(w, r, "oauth_error", "Email address is required for registration")
 		return
 	}
 
 	// Create/find player
+	userLogger.Info("Creating or finding player account for GitHub user")
 	player, err := s.playerRepo.FindOrCreatePlayerByOAuth(
 		"github",
 		fmt.Sprintf("%d", userInfo.ID),
@@ -120,30 +362,49 @@ func (s *OAuthService) HandleGitHubCallback(w http.ResponseWriter, r *http.Reque
 		&userInfo.AvatarURL,
 	)
 	if err != nil {
-		http.Error(w, "Failed to create/find player", http.StatusInternalServerError)
+		userLogger.Error("Failed to create or find player account",
+			"error", err,
+			"provider", "github")
+		redirectWithError(w, r, "database_error", "Failed to create user account")
 		return
 	}
 
+	// Add player context to logger
+	playerLogger := userLogger.With("player_id", player.ID)
+
 	// Generate JWT
+	playerLogger.Debug("Generating JWT token for player")
 	jwtToken, err := GenerateJWT(player)
 	if err != nil {
-		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+		playerLogger.Error("Failed to generate JWT token",
+			"error", err)
+		redirectWithError(w, r, "auth_error", "Failed to create authentication token")
 		return
 	}
 
 	// Set HttpOnly cookie
+	isProduction := utils.GetEnv("ENVIRONMENT", "development") == "production"
 	http.SetCookie(w, &http.Cookie{
 		Name:     "auth_token",
 		Value:    jwtToken,
 		HttpOnly: true,
-		Secure:   utils.GetEnv("ENVIRONMENT", "development") == "production",
+		Secure:   isProduction,
 		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 		MaxAge:   86400, // 24 hours
 	})
 
+	// Check if this is a newly created player
+	isNewPlayer := time.Since(player.CreatedAt) < time.Minute
+	
+	playerLogger.Info("GitHub OAuth authentication successful",
+		"provider", "github",
+		"new_player", isNewPlayer,
+		"player_username", player.Username)
+	
 	frontendURL := utils.GetEnv("FRONTEND_URL", "http://localhost:3000")
-	http.Redirect(w, r, frontendURL+"/auth/callback", http.StatusTemporaryRedirect)
+	successURL := fmt.Sprintf("%s/auth/callback?success=true", frontendURL)
+	http.Redirect(w, r, successURL, http.StatusTemporaryRedirect)
 }
 
 // Google user info structure
@@ -162,56 +423,154 @@ type GitHubUserInfo struct {
 	AvatarURL string `json:"avatar_url"`
 }
 
-// Get user info from Google
-func (s *OAuthService) getGoogleUserInfo(token *oauth2.Token) (*GoogleUserInfo, error) {
-	client := GoogleOAuthConfig.Client(context.Background(), token)
+// Get user info from Google with proper error handling and context
+func (s *OAuthService) getGoogleUserInfo(ctx context.Context, token *oauth2.Token) (*GoogleUserInfo, error) {
+	client := GoogleOAuthConfig.Client(ctx, token)
+	
+	logger := slog.With("api_call", "google_userinfo")
+	logger.Debug("Requesting user info from Google API")
+	
 	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
 	if err != nil {
-		return nil, err
+		logger.Error("Failed to request user info from Google", "error", err)
+		return nil, fmt.Errorf("failed to request user info from Google: %w", err)
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		logger.Error("Google API returned error status", 
+			"status_code", resp.StatusCode,
+			"status", resp.Status)
+		return nil, fmt.Errorf("Google API returned status %d", resp.StatusCode)
+	}
+
 	var userInfo GoogleUserInfo
 	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
-		return nil, err
+		logger.Error("Failed to decode Google user info", "error", err)
+		return nil, fmt.Errorf("failed to decode Google user info: %w", err)
 	}
+
+	// Validate required fields
+	if userInfo.ID == "" {
+		logger.Error("Google user info missing user ID")
+		return nil, fmt.Errorf("Google user info missing user ID")
+	}
+	if userInfo.Email == "" {
+		logger.Error("Google user info missing email")
+		return nil, fmt.Errorf("Google user info missing email")
+	}
+
+	logger.Debug("Successfully retrieved Google user info",
+		"user_id", userInfo.ID,
+		"has_email", userInfo.Email != "",
+		"has_name", userInfo.Name != "",
+		"has_picture", userInfo.Picture != "")
 
 	return &userInfo, nil
 }
 
-// Get user info from GitHub
-func (s *OAuthService) getGitHubUserInfo(token *oauth2.Token) (*GitHubUserInfo, error) {
-	client := GitHubOAuthConfig.Client(context.Background(), token)
+// Get user info from GitHub with proper error handling and context
+func (s *OAuthService) getGitHubUserInfo(ctx context.Context, token *oauth2.Token) (*GitHubUserInfo, error) {
+	client := GitHubOAuthConfig.Client(ctx, token)
+	
+	logger := slog.With("api_call", "github_userinfo")
+	logger.Debug("Requesting user info from GitHub API")
+	
 	resp, err := client.Get("https://api.github.com/user")
 	if err != nil {
-		return nil, err
+		logger.Error("Failed to request user info from GitHub", "error", err)
+		return nil, fmt.Errorf("failed to request user info from GitHub: %w", err)
 	}
 	defer resp.Body.Close()
 
-	var userInfo GitHubUserInfo
-	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
-		return nil, err
+	if resp.StatusCode != http.StatusOK {
+		logger.Error("GitHub API returned error status",
+			"status_code", resp.StatusCode,
+			"status", resp.Status)
+		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
 	}
 
-	// GitHub might not return email in the user endpoint
+	var userInfo GitHubUserInfo
+	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
+		logger.Error("Failed to decode GitHub user info", "error", err)
+		return nil, fmt.Errorf("failed to decode GitHub user info: %w", err)
+	}
+
+	// Validate required fields
+	if userInfo.ID == 0 {
+		logger.Error("GitHub user info missing user ID")
+		return nil, fmt.Errorf("GitHub user info missing user ID")
+	}
+
+	// GitHub might not return email in the user endpoint, try to get it
 	if userInfo.Email == "" {
-		emailResp, err := client.Get("https://api.github.com/user/emails")
-		if err == nil {
-			defer emailResp.Body.Close()
-			var emails []struct {
-				Email   string `json:"email"`
-				Primary bool   `json:"primary"`
-			}
-			if json.NewDecoder(emailResp.Body).Decode(&emails) == nil {
-				for _, email := range emails {
-					if email.Primary {
-						userInfo.Email = email.Email
-						break
-					}
-				}
-			}
+		logger.Debug("GitHub user info missing email, attempting to fetch from emails endpoint")
+		if err := s.fetchGitHubUserEmail(ctx, client, &userInfo); err != nil {
+			logger.Warn("Failed to fetch GitHub user email", "error", err)
+			// Don't fail here - we'll validate email requirement in the caller
 		}
 	}
 
+	logger.Debug("Successfully retrieved GitHub user info",
+		"user_id", userInfo.ID,
+		"has_email", userInfo.Email != "",
+		"has_name", userInfo.Name != "",
+		"has_avatar", userInfo.AvatarURL != "")
+
 	return &userInfo, nil
+}
+
+// fetchGitHubUserEmail attempts to get the user's primary email from GitHub
+func (s *OAuthService) fetchGitHubUserEmail(ctx context.Context, client *http.Client, userInfo *GitHubUserInfo) error {
+	logger := slog.With("api_call", "github_emails", "github_user_id", userInfo.ID)
+	
+	logger.Debug("Requesting email information from GitHub API")
+	emailResp, err := client.Get("https://api.github.com/user/emails")
+	if err != nil {
+		logger.Error("Failed to request emails from GitHub", "error", err)
+		return fmt.Errorf("failed to request emails from GitHub: %w", err)
+	}
+	defer emailResp.Body.Close()
+
+	if emailResp.StatusCode != http.StatusOK {
+		logger.Error("GitHub emails API returned error status",
+			"status_code", emailResp.StatusCode,
+			"status", emailResp.Status)
+		return fmt.Errorf("GitHub emails API returned status %d", emailResp.StatusCode)
+	}
+
+	var emails []struct {
+		Email    string `json:"email"`
+		Primary  bool   `json:"primary"`
+		Verified bool   `json:"verified"`
+	}
+	
+	if err := json.NewDecoder(emailResp.Body).Decode(&emails); err != nil {
+		logger.Error("Failed to decode GitHub emails", "error", err)
+		return fmt.Errorf("failed to decode GitHub emails: %w", err)
+	}
+
+	logger.Debug("Retrieved GitHub emails", "email_count", len(emails))
+
+	// Find primary verified email
+	for _, email := range emails {
+		if email.Primary && email.Verified {
+			userInfo.Email = email.Email
+			logger.Debug("Found primary verified email", "email", email.Email)
+			return nil
+		}
+	}
+
+	// Fallback to any verified email
+	for _, email := range emails {
+		if email.Verified {
+			userInfo.Email = email.Email
+			logger.Debug("Found verified email (not primary)", "email", email.Email)
+			return nil
+		}
+	}
+
+	logger.Warn("No verified email found for GitHub user",
+		"total_emails", len(emails))
+	return fmt.Errorf("no verified email found")
 }

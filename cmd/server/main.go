@@ -2,9 +2,9 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"planets-server/internal/auth"
@@ -32,38 +32,64 @@ var db *database.DB
 var playerRepo *models.PlayerRepository
 var oauthService *auth.OAuthService
 
+func initLogger() {
+	var handler slog.Handler
+	
+	if utils.GetEnv("ENVIRONMENT", "development") == "production" {
+		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slog.LevelInfo,
+		})
+	} else {
+		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		})
+	}
+	
+	slog.SetDefault(slog.New(handler))
+}
+
 func main() {
+	// Initialize logger
+	initLogger()
+	
+	// Load environment variables
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using system environment variables")
+		slog.Debug("No .env file found, using system environment variables")
 	}
 
+	// Initialize OAuth
 	auth.InitOAuth()
+	slog.Info("OAuth configuration initialized")
 	
+	// Connect to database
 	var err error
 	db, err = database.Connect()
 	if err != nil {
-		log.Fatal("Failed to connect to database:", err)
+		slog.Error("Failed to connect to database", "error", err)
+		os.Exit(1)
 	}
 	defer db.Close()
-
-	fmt.Println("Connected to database successfully")
+	slog.Info("Connected to database successfully")
 
 	// Run migrations
-	fmt.Println("Running database migrations...")
+	slog.Info("Running database migrations...")
 	if err := db.RunMigrations(); err != nil {
-		log.Fatal("Failed to run migrations:", err)
+		slog.Error("Failed to run migrations", "error", err)
+		os.Exit(1)
 	}
-	fmt.Println("Migrations completed successfully")
+	slog.Info("Migrations completed successfully")
 
 	// Initialize services
 	playerRepo = models.NewPlayerRepository(db.DB)
 	oauthService = auth.NewOAuthService(playerRepo)
-	fmt.Println("Services initialized")
+	slog.Info("Services initialized")
 
 	// Setup CORS
 	corsMiddleware := middleware.SetupCORS()
-	fmt.Printf("CORS configured for origin: %s\n", utils.GetEnv("FRONTEND_URL", "http://localhost:3000"))
+	frontendURL := utils.GetEnv("FRONTEND_URL", "http://localhost:3000")
+	slog.Info("CORS configured", "allowed_origin", frontendURL)
 
+	// Setup routes
 	mux := http.NewServeMux()
 
 	// API endpoints
@@ -82,16 +108,25 @@ func main() {
 	// Wrap mux with CORS middleware
 	handler := corsMiddleware.Handler(mux)
 
-	fmt.Println("Planets! server starting on :8080")
-	log.Fatal(http.ListenAndServe(":8080", handler))
+	port := ":8080"
+	slog.Info("Starting Planets! server", "port", port)
+	if err := http.ListenAndServe(port, handler); err != nil {
+		slog.Error("Server failed to start", "error", err, "port", port)
+		os.Exit(1)
+	}
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
+	logger := slog.With("handler", "health", "remote_addr", r.RemoteAddr)
+	logger.Debug("Health check requested")
+	
 	w.Header().Set("Content-Type", "application/json")
 	
 	dbStatus := "disconnected"
 	if err := db.Ping(); err == nil {
 		dbStatus = "connected"
+	} else {
+		logger.Warn("Database ping failed", "error", err)
 	}
 	
 	response := HealthResponse{
@@ -99,14 +134,25 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 		Timestamp: time.Now().Format(time.RFC3339),
 		Database:  dbStatus,
 	}
-	json.NewEncoder(w).Encode(response)
+	
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		logger.Error("Failed to encode health response", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	
+	logger.Debug("Health check completed", "db_status", dbStatus)
 }
 
 func gameStatusHandler(w http.ResponseWriter, r *http.Request) {
+	logger := slog.With("handler", "game_status", "remote_addr", r.RemoteAddr)
+	logger.Debug("Game status requested")
+	
 	w.Header().Set("Content-Type", "application/json")
 
 	playerCount, err := playerRepo.GetPlayerCount()
 	if err != nil {
+		logger.Warn("Failed to get player count", "error", err)
 		playerCount = 0
 	}
 
@@ -115,14 +161,25 @@ func gameStatusHandler(w http.ResponseWriter, r *http.Request) {
 		Turn:          1,
 		OnlinePlayers: playerCount,
 	}
-	json.NewEncoder(w).Encode(response)
+	
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		logger.Error("Failed to encode game status response", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	
+	logger.Debug("Game status completed", "player_count", playerCount)
 }
 
 func playersHandler(w http.ResponseWriter, r *http.Request) {
+	logger := slog.With("handler", "players", "remote_addr", r.RemoteAddr)
+	logger.Debug("Players list requested")
+	
 	w.Header().Set("Content-Type", "application/json")
 	
 	players, err := playerRepo.GetAllPlayers()
 	if err != nil {
+		logger.Error("Failed to fetch players", "error", err)
 		http.Error(w, "Failed to fetch players", http.StatusInternalServerError)
 		return
 	}
@@ -131,13 +188,26 @@ func playersHandler(w http.ResponseWriter, r *http.Request) {
 		players = []models.Player{}
 	}
 	
-	json.NewEncoder(w).Encode(players)
+	if err := json.NewEncoder(w).Encode(players); err != nil {
+		logger.Error("Failed to encode players response", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	
+	logger.Debug("Players list completed", "player_count", len(players))
 }
 
 func meHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	
 	claims := r.Context().Value("user").(*auth.Claims)
+	logger := slog.With(
+		"handler", "me", 
+		"remote_addr", r.RemoteAddr,
+		"player_id", claims.PlayerID,
+		"username", claims.Username,
+	)
+	logger.Debug("User info requested")
+	
+	w.Header().Set("Content-Type", "application/json")
 	
 	response := map[string]interface{}{
 		"player_id": claims.PlayerID,
@@ -145,10 +215,19 @@ func meHandler(w http.ResponseWriter, r *http.Request) {
 		"email":     claims.Email,
 	}
 	
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		logger.Error("Failed to encode user info response", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	
+	logger.Debug("User info completed")
 }
 
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
+	logger := slog.With("handler", "logout", "remote_addr", r.RemoteAddr)
+	logger.Debug("Logout requested")
+	
 	// Clear the cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:     "auth_token",
@@ -161,5 +240,10 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 	})
 	
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Logged out"))
+	if _, err := w.Write([]byte("Logged out")); err != nil {
+		logger.Error("Failed to write logout response", "error", err)
+		return
+	}
+	
+	logger.Info("User logged out successfully")
 }
