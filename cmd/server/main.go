@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"planets-server/internal/auth"
@@ -49,19 +52,16 @@ func initLogger() {
 }
 
 func main() {
-	// Initialize logger
 	initLogger()
 	
-	// Load environment variables
 	if err := godotenv.Load(); err != nil {
 		slog.Debug("No .env file found, using system environment variables")
 	}
 
-	// Initialize OAuth
+	// Initialize components
 	auth.InitOAuth()
 	slog.Info("OAuth configuration initialized")
 	
-	// Connect to database
 	var err error
 	db, err = database.Connect()
 	if err != nil {
@@ -71,7 +71,6 @@ func main() {
 	defer db.Close()
 	slog.Info("Connected to database successfully")
 
-	// Run migrations
 	slog.Info("Running database migrations...")
 	if err := db.RunMigrations(); err != nil {
 		slog.Error("Failed to run migrations", "error", err)
@@ -79,24 +78,66 @@ func main() {
 	}
 	slog.Info("Migrations completed successfully")
 
-	// Initialize services
 	playerRepo = models.NewPlayerRepository(db.DB)
 	oauthService = auth.NewOAuthService(playerRepo)
 	slog.Info("Services initialized")
 
-	// Setup CORS
 	corsMiddleware := middleware.SetupCORS()
 	frontendURL := utils.GetEnv("FRONTEND_URL", "http://localhost:3000")
 	slog.Info("CORS configured", "allowed_origin", frontendURL)
 
 	// Setup routes
 	mux := http.NewServeMux()
+	setupRoutes(mux)
+	handler := corsMiddleware.Handler(mux)
 
+	// Create server
+	port := utils.GetEnv("PORT", "8080")
+	if port[0] != ':' {
+		port = ":" + port
+	}
+	
+	server := &http.Server{
+		Addr:         port,
+		Handler:      handler,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Start server in goroutine
+	go func() {
+		slog.Info("Starting Planets! server", "port", port)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("Server failed to start", "error", err, "port", port)
+			os.Exit(1)
+		}
+	}()
+
+	// Graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	
+	slog.Info("Shutting down server...")
+	
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	
+	if err := server.Shutdown(ctx); err != nil {
+		slog.Error("Server forced to shutdown", "error", err)
+		os.Exit(1)
+	}
+	
+	slog.Info("Server exited gracefully")
+}
+
+func setupRoutes(mux *http.ServeMux) {
 	// API endpoints
 	mux.HandleFunc("/api/health", healthHandler)
 	mux.HandleFunc("/api/game/status", gameStatusHandler)
 	mux.HandleFunc("/api/players", playersHandler)
-	mux.Handle("/api/me", middleware.JWTMiddleware(http.HandlerFunc(meHandler))) // Protected route
+	mux.Handle("/api/me", middleware.JWTMiddleware(http.HandlerFunc(meHandler)))
 
 	// OAuth endpoints
 	mux.HandleFunc("/auth/google", oauthService.HandleGoogleAuth)
@@ -104,16 +145,6 @@ func main() {
 	mux.HandleFunc("/auth/github", oauthService.HandleGitHubAuth)
 	mux.HandleFunc("/auth/github/callback", oauthService.HandleGitHubCallback)
 	mux.HandleFunc("/auth/logout", logoutHandler)
-
-	// Wrap mux with CORS middleware
-	handler := corsMiddleware.Handler(mux)
-
-	port := ":8080"
-	slog.Info("Starting Planets! server", "port", port)
-	if err := http.ListenAndServe(port, handler); err != nil {
-		slog.Error("Server failed to start", "error", err, "port", port)
-		os.Exit(1)
-	}
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
