@@ -15,11 +15,7 @@ func SetupCORS() *cors.Cors {
 	allowedOrigins := []string{
 		utils.GetEnv("FRONTEND_URL", "http://localhost:3000"),
 	}
-
-	if prodOrigin := utils.GetEnv("PROD_FRONTEND_URL", ""); prodOrigin != "" {
-		allowedOrigins = append(allowedOrigins, prodOrigin)
-	}
-
+	
 	// Check debug mode
 	debugMode := utils.GetEnv("CORS_DEBUG", "") == "true"
 
