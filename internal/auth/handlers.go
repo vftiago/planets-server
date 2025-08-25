@@ -2,8 +2,6 @@ package auth
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -61,15 +59,6 @@ func redirectWithError(w http.ResponseWriter, r *http.Request, errorType, messag
 	http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
 }
 
-func generateStateToken() (string, error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("failed to generate random state token: %w", err)
-	}
-	
-	return base64.URLEncoding.EncodeToString(b), nil
-}
-
 // Google OAuth initiation
 func (s *OAuthService) HandleGoogleAuth(w http.ResponseWriter, r *http.Request) {
 	logger := slog.With(
@@ -86,8 +75,8 @@ func (s *OAuthService) HandleGoogleAuth(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Generate secure state token for CSRF protection
-	state, err := generateStateToken()
+	// Generate and store secure state token
+	state, err := GenerateOAuthState("google", r.UserAgent())
 	if err != nil {
 		logger.Error("Failed to generate state token", "error", err)
 		sendErrorResponse(w, http.StatusInternalServerError,
@@ -95,7 +84,6 @@ func (s *OAuthService) HandleGoogleAuth(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	
-	// TODO: Store state in session/cache for validation
 	url := GoogleOAuthConfig.AuthCodeURL(state, oauth2.AccessTypeOffline)
 	
 	logger.Info("Initiating Google OAuth flow", 
@@ -111,7 +99,6 @@ func (s *OAuthService) HandleGoogleCallback(w http.ResponseWriter, r *http.Reque
 	state := r.URL.Query().Get("state")
 	errorParam := r.URL.Query().Get("error")
 	
-	// Create logger with request context
 	logger := slog.With(
 		"handler", "google_oauth_callback",
 		"user_agent", r.UserAgent(),
@@ -136,16 +123,17 @@ func (s *OAuthService) HandleGoogleCallback(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	
-	// Validate state token (CSRF protection)
-	if state == "" {
-		logger.Error("Google OAuth callback missing state parameter")
-		redirectWithError(w, r, "oauth_error", "Invalid request state")
+	// Validate state token against stored value
+	if err := ValidateOAuthState(state, "google", r.UserAgent()); err != nil {
+		logger.Error("OAuth state validation failed", 
+			"error", err,
+			"provider", "google",
+			"state", state)
+		redirectWithError(w, r, "oauth_error", "Invalid request state - possible CSRF attack")
 		return
 	}
 	
-	// TODO: Validate state token against stored value for better security
-	
-	logger.Info("Processing Google OAuth callback")
+	logger.Info("OAuth state validation successful - proceeding with Google OAuth callback")
 
 	// Exchange code for token with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30 * time.Second)
@@ -256,8 +244,8 @@ func (s *OAuthService) HandleGitHubAuth(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Generate secure state token for CSRF protection
-	state, err := generateStateToken()
+	// Generate and store secure state token
+	state, err := GenerateOAuthState("github", r.UserAgent())
 	if err != nil {
 		logger.Error("Failed to generate state token", "error", err)
 		sendErrorResponse(w, http.StatusInternalServerError,
@@ -280,7 +268,6 @@ func (s *OAuthService) HandleGitHubCallback(w http.ResponseWriter, r *http.Reque
 	state := r.URL.Query().Get("state")
 	errorParam := r.URL.Query().Get("error")
 	
-	// Create logger with request context
 	logger := slog.With(
 		"handler", "github_oauth_callback",
 		"user_agent", r.UserAgent(),
@@ -305,14 +292,17 @@ func (s *OAuthService) HandleGitHubCallback(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	
-	// Validate state token (CSRF protection)
-	if state == "" {
-		logger.Error("GitHub OAuth callback missing state parameter")
-		redirectWithError(w, r, "oauth_error", "Invalid request state")
+	// Validate state token against stored value
+	if err := ValidateOAuthState(state, "github", r.UserAgent()); err != nil {
+		logger.Error("OAuth state validation failed", 
+			"error", err,
+			"provider", "github",
+			"state", state)
+		redirectWithError(w, r, "oauth_error", "Invalid request state - possible CSRF attack")
 		return
 	}
 
-	logger.Info("Processing GitHub OAuth callback")
+	logger.Info("OAuth state validation successful - proceeding with GitHub OAuth callback")
 
 	// Exchange code for token with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
