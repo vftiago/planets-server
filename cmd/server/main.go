@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
@@ -14,26 +13,11 @@ import (
 	"planets-server/internal/database"
 	"planets-server/internal/middleware"
 	"planets-server/internal/models"
+	"planets-server/internal/server"
 	"planets-server/internal/utils"
 
 	"github.com/joho/godotenv"
 )
-
-type HealthResponse struct {
-	Status    string `json:"status"`
-	Timestamp string `json:"timestamp"`
-	Database  string `json:"database"`
-}
-
-type GameStatusResponse struct {
-	Game          string `json:"game"`
-	Turn          int    `json:"turn"`
-	OnlinePlayers int    `json:"online_players"`
-}
-
-var db *database.DB
-var playerRepo *models.PlayerRepository
-var oauthService *auth.OAuthService
 
 func initLogger() {
 	var handler slog.Handler
@@ -52,52 +36,58 @@ func initLogger() {
 }
 
 func main() {
+	// Initialize logger
 	initLogger()
+	logger := slog.With("component", "main")
 	
+	// Load environment variables
 	if err := godotenv.Load(); err != nil {
-		slog.Debug("No .env file found, using system environment variables")
+		logger.Debug("No .env file found, using system environment variables")
 	}
 
-	// Initialize components
+	// Initialize OAuth configuration
 	auth.InitOAuth()
-	slog.Info("OAuth configuration initialized")
+	logger.Info("OAuth configuration initialized")
 	
-	var err error
-	db, err = database.Connect()
+	// Connect to database
+	db, err := database.Connect()
 	if err != nil {
-		slog.Error("Failed to connect to database", "error", err)
+		logger.Error("Failed to connect to database", "error", err)
 		os.Exit(1)
 	}
 	defer db.Close()
-	slog.Info("Connected to database successfully")
+	logger.Info("Database connection established")
 
-	slog.Info("Running database migrations...")
+	// Run migrations
+	logger.Info("Running database migrations...")
 	if err := db.RunMigrations(); err != nil {
-		slog.Error("Failed to run migrations", "error", err)
+		logger.Error("Failed to run migrations", "error", err)
 		os.Exit(1)
 	}
-	slog.Info("Migrations completed successfully")
+	logger.Info("Migrations completed successfully")
 
-	playerRepo = models.NewPlayerRepository(db.DB)
-	oauthService = auth.NewOAuthService(playerRepo)
-	slog.Info("Services initialized")
+	// Initialize repositories and services
+	playerRepo := models.NewPlayerRepository(db.DB)
+	oauthService := auth.NewOAuthService(playerRepo)
+	logger.Info("Services initialized")
 
+	// Setup middleware
 	corsMiddleware := middleware.SetupCORS()
 	frontendURL := utils.GetEnv("FRONTEND_URL", "http://localhost:3000")
-	slog.Info("CORS configured", "allowed_origin", frontendURL)
+	logger.Info("CORS configured", "allowed_origin", frontendURL)
 
 	// Setup routes
-	mux := http.NewServeMux()
-	setupRoutes(mux)
+	routes := server.NewRoutes(db, playerRepo, oauthService)
+	mux := routes.Setup()
 	handler := corsMiddleware.Handler(mux)
 
-	// Create server
+	// Configure and start server
 	port := utils.GetEnv("PORT", "8080")
 	if port[0] != ':' {
 		port = ":" + port
 	}
 	
-	server := &http.Server{
+	httpServer := &http.Server{
 		Addr:         port,
 		Handler:      handler,
 		ReadTimeout:  15 * time.Second,
@@ -107,174 +97,28 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		slog.Info("Starting Planets! server", "port", port)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("Server failed to start", "error", err, "port", port)
+		logger.Info("Starting Planets! server", "port", port)
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("Server failed to start", "error", err, "port", port)
 			os.Exit(1)
 		}
 	}()
 
-	// Graceful shutdown
+	// Wait for interrupt signal for graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	
-	slog.Info("Shutting down server...")
+	logger.Info("Shutting down server...")
 	
+	// Give outstanding requests 30 seconds to complete
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	
-	if err := server.Shutdown(ctx); err != nil {
-		slog.Error("Server forced to shutdown", "error", err)
+	if err := httpServer.Shutdown(ctx); err != nil {
+		logger.Error("Server forced to shutdown", "error", err)
 		os.Exit(1)
 	}
 	
-	slog.Info("Server exited gracefully")
-}
-
-func setupRoutes(mux *http.ServeMux) {
-	// API endpoints
-	mux.HandleFunc("/api/health", healthHandler)
-	mux.HandleFunc("/api/game/status", gameStatusHandler)
-	mux.HandleFunc("/api/players", playersHandler)
-	mux.Handle("/api/me", middleware.JWTMiddleware(http.HandlerFunc(meHandler)))
-
-	// OAuth endpoints
-	mux.HandleFunc("/auth/google", oauthService.HandleGoogleAuth)
-	mux.HandleFunc("/auth/google/callback", oauthService.HandleGoogleCallback)
-	mux.HandleFunc("/auth/github", oauthService.HandleGitHubAuth)
-	mux.HandleFunc("/auth/github/callback", oauthService.HandleGitHubCallback)
-	mux.HandleFunc("/auth/logout", logoutHandler)
-}
-
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-	logger := slog.With("handler", "health", "remote_addr", r.RemoteAddr)
-	logger.Debug("Health check requested")
-	
-	w.Header().Set("Content-Type", "application/json")
-	
-	dbStatus := "disconnected"
-	if err := db.Ping(); err == nil {
-		dbStatus = "connected"
-	} else {
-		logger.Warn("Database ping failed", "error", err)
-	}
-	
-	response := HealthResponse{
-		Status:    "healthy",
-		Timestamp: time.Now().Format(time.RFC3339),
-		Database:  dbStatus,
-	}
-	
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		logger.Error("Failed to encode health response", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-	
-	logger.Debug("Health check completed", "db_status", dbStatus)
-}
-
-func gameStatusHandler(w http.ResponseWriter, r *http.Request) {
-	logger := slog.With("handler", "game_status", "remote_addr", r.RemoteAddr)
-	logger.Debug("Game status requested")
-	
-	w.Header().Set("Content-Type", "application/json")
-
-	playerCount, err := playerRepo.GetPlayerCount()
-	if err != nil {
-		logger.Warn("Failed to get player count", "error", err)
-		playerCount = 0
-	}
-
-	response := GameStatusResponse{
-		Game:          "Planets!",
-		Turn:          1,
-		OnlinePlayers: playerCount,
-	}
-	
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		logger.Error("Failed to encode game status response", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-	
-	logger.Debug("Game status completed", "player_count", playerCount)
-}
-
-func playersHandler(w http.ResponseWriter, r *http.Request) {
-	logger := slog.With("handler", "players", "remote_addr", r.RemoteAddr)
-	logger.Debug("Players list requested")
-	
-	w.Header().Set("Content-Type", "application/json")
-	
-	players, err := playerRepo.GetAllPlayers()
-	if err != nil {
-		logger.Error("Failed to fetch players", "error", err)
-		http.Error(w, "Failed to fetch players", http.StatusInternalServerError)
-		return
-	}
-
-	if players == nil {
-		players = []models.Player{}
-	}
-	
-	if err := json.NewEncoder(w).Encode(players); err != nil {
-		logger.Error("Failed to encode players response", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-	
-	logger.Debug("Players list completed", "player_count", len(players))
-}
-
-func meHandler(w http.ResponseWriter, r *http.Request) {
-	claims := r.Context().Value("user").(*auth.Claims)
-	logger := slog.With(
-		"handler", "me", 
-		"remote_addr", r.RemoteAddr,
-		"player_id", claims.PlayerID,
-		"username", claims.Username,
-	)
-	logger.Debug("User info requested")
-	
-	w.Header().Set("Content-Type", "application/json")
-	
-	response := map[string]interface{}{
-		"player_id": claims.PlayerID,
-		"username":  claims.Username,
-		"email":     claims.Email,
-	}
-	
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		logger.Error("Failed to encode user info response", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-	
-	logger.Debug("User info completed")
-}
-
-func logoutHandler(w http.ResponseWriter, r *http.Request) {
-	logger := slog.With("handler", "logout", "remote_addr", r.RemoteAddr)
-	logger.Debug("Logout requested")
-	
-	// Clear the cookie
-	http.SetCookie(w, &http.Cookie{
-		Name:     "auth_token",
-		Value:    "",
-		HttpOnly: true,
-		Secure:   utils.GetEnv("ENVIRONMENT", "development") == "production",
-		SameSite: http.SameSiteStrictMode,
-		Path:     "/",
-		MaxAge:   -1, // Expire immediately
-	})
-	
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write([]byte("Logged out")); err != nil {
-		logger.Error("Failed to write logout response", "error", err)
-		return
-	}
-	
-	logger.Info("User logged out successfully")
+	logger.Info("Server exited gracefully")
 }
