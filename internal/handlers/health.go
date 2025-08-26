@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"planets-server/internal/database"
+	"planets-server/internal/shared/database"
 )
 
 type HealthResponse struct {

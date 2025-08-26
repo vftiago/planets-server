@@ -9,11 +9,11 @@ import (
 	"syscall"
 
 	"planets-server/internal/auth"
-	"planets-server/internal/database"
 	"planets-server/internal/middleware"
 	"planets-server/internal/models"
 	"planets-server/internal/server"
 	"planets-server/internal/shared/config"
+	"planets-server/internal/shared/database"
 	"planets-server/internal/shared/logger"
 )
 

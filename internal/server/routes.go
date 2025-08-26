@@ -6,10 +6,10 @@ import (
 
 	"planets-server/internal/auth"
 	authHandlers "planets-server/internal/auth/handlers"
-	"planets-server/internal/database"
 	"planets-server/internal/handlers"
 	"planets-server/internal/middleware"
 	"planets-server/internal/models"
+	"planets-server/internal/shared/database"
 )
 
 type Routes struct {
