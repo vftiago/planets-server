@@ -3,10 +3,10 @@ package auth
 import (
 	"fmt"
 	"log/slog"
-	"os"
 	"time"
 
 	"planets-server/internal/models"
+	"planets-server/internal/shared/config"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -18,24 +18,8 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-func getJWTSecret() (string, error) {
-	logger := slog.With("component", "jwt", "operation", "get_secret")
-	
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		logger.Error("JWT_SECRET environment variable is required but not set")
-		return "", fmt.Errorf("JWT_SECRET environment variable is required but not set")
-	}
-	if len(secret) < 32 {
-		logger.Error("JWT_SECRET is too short", "min_length", 32)
-		return "", fmt.Errorf("JWT_SECRET must be at least 32 characters long")
-	}
-	
-	logger.Debug("JWT secret validated")
-	return secret, nil
-}
-
 func GenerateJWT(player *models.Player) (string, error) {
+	cfg := config.GlobalConfig
 	logger := slog.With(
 		"component", "jwt", 
 		"operation", "generate",
@@ -44,13 +28,7 @@ func GenerateJWT(player *models.Player) (string, error) {
 	)
 	logger.Debug("Generating JWT token for player")
 	
-	secret, err := getJWTSecret()
-	if err != nil {
-		logger.Error("Failed to get JWT secret", "error", err)
-		return "", fmt.Errorf("cannot generate JWT: %w", err)
-	}
-	
-	expiresAt := time.Now().Add(24 * time.Hour)
+	expiresAt := time.Now().Add(cfg.Auth.TokenExpiration)
 	claims := Claims{
 		PlayerID: player.ID,
 		Username: player.Username,
@@ -63,7 +41,7 @@ func GenerateJWT(player *models.Player) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(secret))
+	tokenString, err := token.SignedString([]byte(cfg.Auth.JWTSecret))
 	if err != nil {
 		logger.Error("Failed to sign JWT token", "error", err)
 		return "", fmt.Errorf("failed to sign JWT token: %w", err)
@@ -74,21 +52,16 @@ func GenerateJWT(player *models.Player) (string, error) {
 }
 
 func ValidateJWT(tokenString string) (*Claims, error) {
+	cfg := config.GlobalConfig
 	logger := slog.With("component", "jwt", "operation", "validate")
 	logger.Debug("Validating JWT token")
-	
-	secret, err := getJWTSecret()
-	if err != nil {
-		logger.Error("Failed to get JWT secret for validation", "error", err)
-		return nil, fmt.Errorf("cannot validate JWT: %w", err)
-	}
 	
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			logger.Error("Unexpected JWT signing method", "method", token.Header["alg"])
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return []byte(secret), nil
+		return []byte(cfg.Auth.JWTSecret), nil
 	})
 
 	if err != nil {

@@ -7,109 +7,145 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"planets-server/internal/auth"
 	"planets-server/internal/database"
 	"planets-server/internal/middleware"
 	"planets-server/internal/models"
 	"planets-server/internal/server"
-	"planets-server/internal/utils"
-
-	"github.com/joho/godotenv"
+	"planets-server/internal/shared/config"
+	"planets-server/internal/shared/logger"
 )
 
-func initLogger() {
-	var handler slog.Handler
-	
-	if utils.GetEnv("ENVIRONMENT", "development") == "production" {
-		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level: slog.LevelInfo,
-		})
-	} else {
-		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-			Level: slog.LevelDebug,
-		})
-	}
-	
-	slog.SetDefault(slog.New(handler))
-}
-
 func main() {
-	// Initialize logger
-	initLogger()
-	logger := slog.With("component", "main")
-	
-	// Load environment variables
-	if err := godotenv.Load(); err != nil {
-		logger.Debug("No .env file found, using system environment variables")
+	if err := config.Init(); err != nil {
+		slog.Error("Failed to initialize configuration", "error", err)
+		os.Exit(1)
 	}
-
-	// Initialize OAuth configuration
-	oauthConfig := auth.InitOAuth()
-	logger.Info("OAuth configuration initialized")
 	
-	// Connect to database
-	db, err := database.Connect()
+	cfg := config.GlobalConfig
+
+	logger.Init()
+
+	logger := slog.With("component", "main")
+	logger.Info("Starting Planets! server",
+		"environment", cfg.Server.Environment,
+		"port", cfg.Server.Port,
+	)
+
+	oauthConfig := initOAuth()
+	
+	db, err := initDatabase()
 	if err != nil {
-		logger.Error("Failed to connect to database", "error", err)
+		logger.Error("Failed to initialize database", "error", err)
 		os.Exit(1)
 	}
 	defer db.Close()
-	logger.Info("Database connection established")
 
-	// Run migrations
 	if err := db.RunMigrations(); err != nil {
 		logger.Error("Failed to run migrations", "error", err)
 		os.Exit(1)
 	}
 
-	// Initialize repositories
 	playerRepo := models.NewPlayerRepository(db.DB)
 
-	// Setup middleware
-	corsMiddleware := middleware.SetupCORS()
+	corsMiddleware := initCORS()
 
-	// Setup routes
 	routes := server.NewRoutes(db, playerRepo, oauthConfig)
 	mux := routes.Setup()
 	handler := corsMiddleware.Handler(mux)
 
-	// Configure and start server
-	port := utils.GetEnv("PORT", "8080")
+	httpServer := createHTTPServer(handler)
+
+	go startServer(httpServer, logger)
+	
+	waitForShutdown(httpServer, logger)
+}
+
+func initOAuth() *auth.OAuthConfig {
+	cfg := config.GlobalConfig
+	logger := slog.With("component", "oauth", "operation", "init")
+	logger.Debug("Initializing OAuth configurations")
+
+	oauthConfig := auth.InitOAuth()
+	
+	logger.Info("OAuth configuration completed",
+		"google_configured", cfg.GoogleOAuthConfigured(),
+		"github_configured", cfg.GitHubOAuthConfigured(),
+	)
+
+	return oauthConfig
+}
+
+func initDatabase() (*database.DB, error) {
+	cfg := config.GlobalConfig
+	logger := slog.With("component", "database", "operation", "init")
+	logger.Debug("Connecting to database")
+
+	db, err := database.Connect()
+	if err != nil {
+		return nil, err
+	}
+
+	logger.Info("Database connection established",
+		"host", cfg.Database.Host,
+		"database", cfg.Database.Name,
+	)
+
+	return db, nil
+}
+
+func initCORS() *middleware.CORSMiddleware {
+	cfg := config.GlobalConfig
+	logger := slog.With("component", "cors", "operation", "setup")
+	logger.Debug("Setting up CORS middleware")
+
+	corsMiddleware := middleware.SetupCORS()
+
+	logger.Info("CORS middleware configured",
+		"allowed_origins", []string{cfg.Frontend.URL},
+		"debug_mode", cfg.Frontend.CORSDebug,
+	)
+
+	return corsMiddleware
+}
+
+func createHTTPServer(handler http.Handler) *http.Server {
+	cfg := config.GlobalConfig
+	port := cfg.Server.Port
 	if port[0] != ':' {
 		port = ":" + port
 	}
-	
-	httpServer := &http.Server{
+
+	return &http.Server{
 		Addr:         port,
 		Handler:      handler,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		ReadTimeout:  cfg.Server.ReadTimeout,
+		WriteTimeout: cfg.Server.WriteTimeout,
+		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
+}
 
-	// Start server in goroutine
-	go func() {
-		logger.Info("Starting Planets! server", "port", port)
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Error("Server failed to start", "error", err, "port", port)
-			os.Exit(1)
-		}
-	}()
+func startServer(server *http.Server, logger *slog.Logger) {
+	logger.Info("HTTP server starting", "addr", server.Addr)
+	
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		logger.Error("Server failed to start", "error", err, "addr", server.Addr)
+		os.Exit(1)
+	}
+}
 
-	// Wait for interrupt signal for graceful shutdown
+func waitForShutdown(server *http.Server, logger *slog.Logger) {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	
 	logger.Info("Shutting down server...")
 	
-	// Give outstanding requests 30 seconds to complete
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), config.GlobalConfig.Server.WriteTimeout)
 	defer cancel()
 	
-	if err := httpServer.Shutdown(ctx); err != nil {
+	if err := server.Shutdown(ctx); err != nil {
 		logger.Error("Server forced to shutdown", "error", err)
 		os.Exit(1)
 	}

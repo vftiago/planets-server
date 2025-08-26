@@ -3,7 +3,7 @@ package auth
 import (
 	"log/slog"
 	"planets-server/internal/auth/providers"
-	"planets-server/internal/utils"
+	"planets-server/internal/shared/config"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/github"
@@ -11,49 +11,43 @@ import (
 )
 
 type OAuthConfig struct {
-	GitHubConfig    *oauth2.Config
-	GoogleConfig    *oauth2.Config
-	GitHubProvider  *providers.GitHubProvider
-	GoogleProvider  *providers.GoogleProvider
+	GitHubConfig     *oauth2.Config
+	GoogleConfig     *oauth2.Config
+	GitHubProvider   *providers.GitHubProvider
+	GoogleProvider   *providers.GoogleProvider
 	GitHubConfigured bool
 	GoogleConfigured bool
 }
 
-// InitOAuth initializes OAuth configuration and returns the config
 func InitOAuth() *OAuthConfig {
+	cfg := config.GlobalConfig
 	logger := slog.With("component", "oauth", "operation", "init")
 	logger.Debug("Initializing OAuth configurations")
 
-	baseURL := utils.GetEnv("BASE_URL", "http://localhost:8080")
-
-	// Initialize GitHub OAuth
 	githubConfig := &oauth2.Config{
-		ClientID:     utils.GetEnv("GITHUB_CLIENT_ID", ""),
-		ClientSecret: utils.GetEnv("GITHUB_CLIENT_SECRET", ""),
-		RedirectURL:  baseURL + "/auth/github/callback",
-		Scopes:       []string{"user:email"},
+		ClientID:     cfg.OAuth.GitHub.ClientID,
+		ClientSecret: cfg.OAuth.GitHub.ClientSecret,
+		RedirectURL:  cfg.OAuth.GitHub.RedirectURL,
+		Scopes:       cfg.OAuth.GitHub.Scopes,
 		Endpoint:     github.Endpoint,
 	}
 
-	// Initialize Google OAuth
 	googleConfig := &oauth2.Config{
-		ClientID:     utils.GetEnv("GOOGLE_CLIENT_ID", ""),
-		ClientSecret: utils.GetEnv("GOOGLE_CLIENT_SECRET", ""),
-		RedirectURL:  baseURL + "/auth/google/callback",
-		Scopes:       []string{"openid", "profile", "email"},
+		ClientID:     cfg.OAuth.Google.ClientID,
+		ClientSecret: cfg.OAuth.Google.ClientSecret,
+		RedirectURL:  cfg.OAuth.Google.RedirectURL,
+		Scopes:       cfg.OAuth.Google.Scopes,
 		Endpoint:     google.Endpoint,
 	}
 
-	// Check configuration status
-	githubConfigured := githubConfig.ClientID != "" && githubConfig.ClientSecret != ""
-	googleConfigured := googleConfig.ClientID != "" && googleConfig.ClientSecret != ""
+	githubConfigured := cfg.GitHubOAuthConfigured()
+	googleConfigured := cfg.GoogleOAuthConfigured()
 
-	// Create providers
 	githubProvider := providers.NewGitHubProvider(githubConfig)
 	googleProvider := providers.NewGoogleProvider(googleConfig)
 
 	logger.Info("OAuth configuration completed",
-		"base_url", baseURL,
+		"base_url", cfg.Server.BaseURL,
 		"github_configured", githubConfigured,
 		"google_configured", googleConfigured,
 		"github_redirect", githubConfig.RedirectURL,

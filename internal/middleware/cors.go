@@ -2,41 +2,45 @@ package middleware
 
 import (
 	"log/slog"
-	"planets-server/internal/utils"
+	"net/http"
+	"planets-server/internal/shared/config"
 
 	"github.com/rs/cors"
 )
 
-func SetupCORS() *cors.Cors {
+type CORSMiddleware struct {
+	*cors.Cors
+}
+
+func SetupCORS() *CORSMiddleware {
+	cfg := config.GlobalConfig
 	logger := slog.With("component", "cors", "operation", "setup")
 	logger.Debug("Setting up CORS middleware")
 
-	// Get allowed origins
-	allowedOrigins := []string{
-		utils.GetEnv("FRONTEND_URL", "http://localhost:3000"),
-	}
-	
-	// Check debug mode
-	debugMode := utils.GetEnv("CORS_DEBUG", "") == "true"
+	allowedOrigins := []string{cfg.Frontend.URL}
 
 	corsConfig := cors.New(cors.Options{
 		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization"},
 		AllowCredentials: true,
-		Debug:            debugMode,
+		Debug:            cfg.Frontend.CORSDebug,
 	})
 
 	logger.Info("CORS middleware configured",
 		"allowed_origins", allowedOrigins,
 		"allowed_methods", []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		"allow_credentials", true,
-		"debug_mode", debugMode,
+		"debug_mode", cfg.Frontend.CORSDebug,
 	)
 
-	if debugMode {
+	if cfg.Frontend.CORSDebug {
 		logger.Debug("CORS debug mode enabled - will log CORS request details")
 	}
 
-	return corsConfig
+	return &CORSMiddleware{corsConfig}
+}
+
+func (c *CORSMiddleware) Handler(h http.Handler) http.Handler {
+	return c.Cors.Handler(h)
 }

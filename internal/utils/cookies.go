@@ -3,60 +3,62 @@ package utils
 import (
 	"net/http"
 	"net/url"
+	"planets-server/internal/shared/config"
 	"strings"
 )
 
-// SetAuthCookie sets an authentication cookie with proper security settings
 func SetAuthCookie(w http.ResponseWriter, token string) {
-	isProduction := GetEnv("ENVIRONMENT", "development") == "production"
+	cfg := config.GlobalConfig
+	cookie := createAuthCookie(cfg)
+	cookie.Value = token
+	cookie.MaxAge = int(cfg.Auth.TokenExpiration.Seconds())
 	
-	// Extract domain from frontend URL for proper cookie domain
-	frontendURL := GetEnv("FRONTEND_URL", "http://localhost:3000")
-	var domain string
-	if parsedURL, err := url.Parse(frontendURL); err == nil && parsedURL.Host != "" {
-		host := strings.Split(parsedURL.Host, ":")[0]
-		if host != "localhost" && host != "127.0.0.1" {
-			domain = host
-		}
-	}
-
-	cookie := &http.Cookie{
-		Name:     "auth_token",
-		Value:    token,
-		Path:     "/",
-		Domain:   domain,
-		MaxAge:   86400, // 24 hours
-		HttpOnly: true,
-		Secure:   isProduction,
-		SameSite: http.SameSiteLaxMode, // Better for OAuth flows than Strict
-	}
-
 	http.SetCookie(w, cookie)
 }
 
-// ClearAuthCookie clears the authentication cookie
 func ClearAuthCookie(w http.ResponseWriter) {
-	isProduction := GetEnv("ENVIRONMENT", "development") == "production"
+	cfg := config.GlobalConfig
+	cookie := createAuthCookie(cfg)
+	cookie.Value = ""
+	cookie.MaxAge = -1
 	
-	frontendURL := GetEnv("FRONTEND_URL", "http://localhost:3000")
-	var domain string
-	if parsedURL, err := url.Parse(frontendURL); err == nil && parsedURL.Host != "" {
-		host := strings.Split(parsedURL.Host, ":")[0]
-		if host != "localhost" && host != "127.0.0.1" {
-			domain = host
-		}
-	}
-
-	cookie := &http.Cookie{
-		Name:     "auth_token",
-		Value:    "",
-		Path:     "/",
-		Domain:   domain,
-		HttpOnly: true,
-		Secure:   isProduction,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1, // Expire immediately
-	}
-
 	http.SetCookie(w, cookie)
+}
+
+func createAuthCookie(cfg *config.Config) *http.Cookie {
+	return &http.Cookie{
+		Name:     "auth_token",
+		Path:     "/",
+		Domain:   extractDomain(cfg.Frontend.URL),
+		HttpOnly: true,
+		Secure:   cfg.Auth.CookieSecure,
+		SameSite: parseSameSite(cfg.Auth.CookieSameSite),
+	}
+}
+
+func extractDomain(frontendURL string) string {
+	parsedURL, err := url.Parse(frontendURL)
+	if err != nil || parsedURL.Host == "" {
+		return ""
+	}
+	
+	host := strings.Split(parsedURL.Host, ":")[0]
+	if host == "localhost" || host == "127.0.0.1" {
+		return ""
+	}
+	
+	return host
+}
+
+func parseSameSite(sameSiteStr string) http.SameSite {
+	switch sameSiteStr {
+	case "strict":
+		return http.SameSiteStrictMode
+	case "lax":
+		return http.SameSiteLaxMode
+	case "none":
+		return http.SameSiteNoneMode
+	default:
+		return http.SameSiteLaxMode
+	}
 }
