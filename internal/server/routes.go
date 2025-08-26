@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"planets-server/internal/auth"
+	authHandlers "planets-server/internal/auth/handlers"
 	"planets-server/internal/database"
 	"planets-server/internal/handlers"
 	"planets-server/internal/middleware"
@@ -12,16 +13,16 @@ import (
 )
 
 type Routes struct {
-	db           *database.DB
-	playerRepo   *models.PlayerRepository
-	oauthService *auth.OAuthService
+	db         *database.DB
+	playerRepo *models.PlayerRepository
+	oauthConfig *auth.OAuthConfig
 }
 
-func NewRoutes(db *database.DB, playerRepo *models.PlayerRepository, oauthService *auth.OAuthService) *Routes {
+func NewRoutes(db *database.DB, playerRepo *models.PlayerRepository, oauthConfig *auth.OAuthConfig) *Routes {
 	return &Routes{
-		db:           db,
-		playerRepo:   playerRepo,
-		oauthService: oauthService,
+		db:         db,
+		playerRepo: playerRepo,
+		oauthConfig: oauthConfig,
 	}
 }
 
@@ -31,12 +32,24 @@ func (r *Routes) Setup() *http.ServeMux {
 
 	mux := http.NewServeMux()
 
-	// Initialize handlers
+	// Initialize API handlers
 	healthHandler := handlers.NewHealthHandler(r.db)
 	gameStatusHandler := handlers.NewGameStatusHandler(r.playerRepo)
 	playersHandler := handlers.NewPlayersHandler(r.playerRepo)
 	meHandler := handlers.NewMeHandler()
 	logoutHandler := handlers.NewLogoutHandler()
+
+	// Initialize OAuth handlers
+	googleAuthHandler := authHandlers.NewGoogleAuthHandler(
+		r.oauthConfig.GoogleProvider, 
+		r.playerRepo, 
+		r.oauthConfig.GoogleConfigured,
+	)
+	githubAuthHandler := authHandlers.NewGitHubAuthHandler(
+		r.oauthConfig.GitHubProvider, 
+		r.playerRepo, 
+		r.oauthConfig.GitHubConfigured,
+	)
 
 	// Public API endpoints
 	mux.Handle("/api/health", healthHandler)
@@ -47,10 +60,10 @@ func (r *Routes) Setup() *http.ServeMux {
 	mux.Handle("/api/me", middleware.JWTMiddleware(meHandler))
 
 	// OAuth endpoints
-	mux.HandleFunc("/auth/google", r.oauthService.HandleGoogleAuth)
-	mux.HandleFunc("/auth/google/callback", r.oauthService.HandleGoogleCallback)
-	mux.HandleFunc("/auth/github", r.oauthService.HandleGitHubAuth)
-	mux.HandleFunc("/auth/github/callback", r.oauthService.HandleGitHubCallback)
+	mux.HandleFunc("/auth/google", googleAuthHandler.HandleAuth)
+	mux.HandleFunc("/auth/google/callback", googleAuthHandler.HandleCallback)
+	mux.HandleFunc("/auth/github", githubAuthHandler.HandleAuth)
+	mux.HandleFunc("/auth/github/callback", githubAuthHandler.HandleCallback)
 	mux.Handle("/auth/logout", logoutHandler)
 
 	return mux

@@ -46,7 +46,7 @@ func main() {
 	}
 
 	// Initialize OAuth configuration
-	auth.InitOAuth()
+	oauthConfig := auth.InitOAuth()
 	logger.Info("OAuth configuration initialized")
 	
 	// Connect to database
@@ -59,25 +59,19 @@ func main() {
 	logger.Info("Database connection established")
 
 	// Run migrations
-	logger.Info("Running database migrations...")
 	if err := db.RunMigrations(); err != nil {
 		logger.Error("Failed to run migrations", "error", err)
 		os.Exit(1)
 	}
-	logger.Info("Migrations completed successfully")
 
-	// Initialize repositories and services
+	// Initialize repositories
 	playerRepo := models.NewPlayerRepository(db.DB)
-	oauthService := auth.NewOAuthService(playerRepo)
-	logger.Info("Services initialized")
 
 	// Setup middleware
 	corsMiddleware := middleware.SetupCORS()
-	frontendURL := utils.GetEnv("FRONTEND_URL", "http://localhost:3000")
-	logger.Info("CORS configured", "allowed_origin", frontendURL)
 
 	// Setup routes
-	routes := server.NewRoutes(db, playerRepo, oauthService)
+	routes := server.NewRoutes(db, playerRepo, oauthConfig)
 	mux := routes.Setup()
 	handler := corsMiddleware.Handler(mux)
 

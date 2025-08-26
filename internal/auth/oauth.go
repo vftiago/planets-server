@@ -2,6 +2,7 @@ package auth
 
 import (
 	"log/slog"
+	"planets-server/internal/auth/providers"
 	"planets-server/internal/utils"
 
 	"golang.org/x/oauth2"
@@ -9,17 +10,24 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-var GitHubOAuthConfig *oauth2.Config
-var GoogleOAuthConfig *oauth2.Config
+type OAuthConfig struct {
+	GitHubConfig    *oauth2.Config
+	GoogleConfig    *oauth2.Config
+	GitHubProvider  *providers.GitHubProvider
+	GoogleProvider  *providers.GoogleProvider
+	GitHubConfigured bool
+	GoogleConfigured bool
+}
 
-func InitOAuth() {
+// InitOAuth initializes OAuth configuration and returns the config
+func InitOAuth() *OAuthConfig {
 	logger := slog.With("component", "oauth", "operation", "init")
 	logger.Debug("Initializing OAuth configurations")
 
 	baseURL := utils.GetEnv("BASE_URL", "http://localhost:8080")
 
 	// Initialize GitHub OAuth
-	GitHubOAuthConfig = &oauth2.Config{
+	githubConfig := &oauth2.Config{
 		ClientID:     utils.GetEnv("GITHUB_CLIENT_ID", ""),
 		ClientSecret: utils.GetEnv("GITHUB_CLIENT_SECRET", ""),
 		RedirectURL:  baseURL + "/auth/github/callback",
@@ -28,7 +36,7 @@ func InitOAuth() {
 	}
 
 	// Initialize Google OAuth
-	GoogleOAuthConfig = &oauth2.Config{
+	googleConfig := &oauth2.Config{
 		ClientID:     utils.GetEnv("GOOGLE_CLIENT_ID", ""),
 		ClientSecret: utils.GetEnv("GOOGLE_CLIENT_SECRET", ""),
 		RedirectURL:  baseURL + "/auth/google/callback",
@@ -36,16 +44,20 @@ func InitOAuth() {
 		Endpoint:     google.Endpoint,
 	}
 
-	// Log configuration status
-	githubConfigured := GitHubOAuthConfig.ClientID != "" && GitHubOAuthConfig.ClientSecret != ""
-	googleConfigured := GoogleOAuthConfig.ClientID != "" && GoogleOAuthConfig.ClientSecret != ""
+	// Check configuration status
+	githubConfigured := githubConfig.ClientID != "" && githubConfig.ClientSecret != ""
+	googleConfigured := googleConfig.ClientID != "" && googleConfig.ClientSecret != ""
+
+	// Create providers
+	githubProvider := providers.NewGitHubProvider(githubConfig)
+	googleProvider := providers.NewGoogleProvider(googleConfig)
 
 	logger.Info("OAuth configuration completed",
 		"base_url", baseURL,
 		"github_configured", githubConfigured,
 		"google_configured", googleConfigured,
-		"github_redirect", GitHubOAuthConfig.RedirectURL,
-		"google_redirect", GoogleOAuthConfig.RedirectURL,
+		"github_redirect", githubConfig.RedirectURL,
+		"google_redirect", googleConfig.RedirectURL,
 	)
 
 	if !githubConfigured {
@@ -53,5 +65,14 @@ func InitOAuth() {
 	}
 	if !googleConfigured {
 		logger.Warn("Google OAuth not configured - missing client credentials")
+	}
+
+	return &OAuthConfig{
+		GitHubConfig:     githubConfig,
+		GoogleConfig:     googleConfig,
+		GitHubProvider:   githubProvider,
+		GoogleProvider:   googleProvider,
+		GitHubConfigured: githubConfigured,
+		GoogleConfigured: googleConfigured,
 	}
 }
