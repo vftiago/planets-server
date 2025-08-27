@@ -9,22 +9,24 @@ import (
 
 	"planets-server/internal/auth"
 	"planets-server/internal/auth/providers"
-	"planets-server/internal/models"
+	"planets-server/internal/player"
 	"planets-server/internal/utils"
 )
 
 type GoogleAuthHandler struct {
-	provider     *providers.GoogleProvider
-	playerRepo   *models.PlayerRepository
-	isConfigured bool
+	provider        *providers.GoogleProvider
+	playerService   *player.Service
+	authService     *auth.Service
+	isConfigured    bool
 }
 
 // NewGoogleAuthHandler creates a new Google OAuth handler
-func NewGoogleAuthHandler(provider *providers.GoogleProvider, playerRepo *models.PlayerRepository, isConfigured bool) *GoogleAuthHandler {
+func NewGoogleAuthHandler(provider *providers.GoogleProvider, playerService *player.Service, authService *auth.Service, isConfigured bool) *GoogleAuthHandler {
 	return &GoogleAuthHandler{
-		provider:     provider,
-		playerRepo:   playerRepo,
-		isConfigured: isConfigured,
+		provider:        provider,
+		playerService:   playerService,
+		authService:     authService,
+		isConfigured:    isConfigured,
 	}
 }
 
@@ -143,19 +145,46 @@ func (h *GoogleAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 
 	// Create/find player
 	userLogger.Info("Creating or finding player account for Google user")
-	player, err := h.playerRepo.FindOrCreatePlayerByOAuth(
-		"google",
-		userInfo.ID,
-		userInfo.Email,
-		userInfo.Name,
-		&userInfo.Picture,
-	)
+	
+	// First check if auth provider exists
+	existingPlayerID, err := h.authService.FindPlayerByAuthProvider("google", userInfo.ID)
 	if err != nil {
-		userLogger.Error("Failed to create or find player account",
-			"error", err,
-			"provider", "google")
-		redirectWithError(w, r, "database_error", "Failed to create user account")
+		userLogger.Error("Failed to check auth provider", "error", err)
+		redirectWithError(w, r, "database_error", "Failed to authenticate user")
 		return
+	}
+	
+	var player *player.Player
+	if existingPlayerID > 0 {
+		// Player exists via OAuth
+		player, err = h.playerService.GetPlayerByID(existingPlayerID)
+		if err != nil {
+			userLogger.Error("Failed to get existing player", "error", err)
+			redirectWithError(w, r, "database_error", "Failed to get user account")
+			return
+		}
+	} else {
+		// Find or create player
+		player, err = h.playerService.FindOrCreatePlayerByOAuth(
+			"google",
+			userInfo.ID,
+			userInfo.Email,
+			userInfo.Name,
+			&userInfo.Picture,
+		)
+		if err != nil {
+			userLogger.Error("Failed to create player", "error", err)
+			redirectWithError(w, r, "database_error", "Failed to create user account")
+			return
+		}
+		
+		// Link auth provider
+		err = h.authService.CreateAuthProvider(player.ID, "google", userInfo.ID, userInfo.Email)
+		if err != nil {
+			userLogger.Error("Failed to create auth provider", "error", err)
+			redirectWithError(w, r, "database_error", "Failed to link account")
+			return
+		}
 	}
 
 	// Add player context to logger
@@ -163,7 +192,7 @@ func (h *GoogleAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 
 	// Generate JWT
 	playerLogger.Debug("Generating JWT token for player")
-	jwtToken, err := auth.GenerateJWT(player)
+	jwtToken, err := h.authService.GenerateJWT(player.ID, player.Username, player.Email)
 	if err != nil {
 		playerLogger.Error("Failed to generate JWT token", "error", err)
 		redirectWithError(w, r, "auth_error", "Failed to create authentication token")

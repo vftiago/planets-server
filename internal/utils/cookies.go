@@ -9,7 +9,8 @@ import (
 
 func SetAuthCookie(w http.ResponseWriter, token string) {
 	cfg := config.GlobalConfig
-	cookie := createAuthCookie(cfg)
+
+	cookie := createAuthCookie()
 	cookie.Value = token
 	cookie.MaxAge = int(cfg.Auth.TokenExpiration.Seconds())
 	
@@ -17,15 +18,16 @@ func SetAuthCookie(w http.ResponseWriter, token string) {
 }
 
 func ClearAuthCookie(w http.ResponseWriter) {
-	cfg := config.GlobalConfig
-	cookie := createAuthCookie(cfg)
+	cookie := createAuthCookie()
 	cookie.Value = ""
 	cookie.MaxAge = -1
 	
 	http.SetCookie(w, cookie)
 }
 
-func createAuthCookie(cfg *config.Config) *http.Cookie {
+func createAuthCookie() *http.Cookie {
+	cfg := config.GlobalConfig
+
 	return &http.Cookie{
 		Name:     "auth_token",
 		Path:     "/",

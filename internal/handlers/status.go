@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"planets-server/internal/models"
+	"planets-server/internal/player"
 )
 
 type GameStatusResponse struct {
@@ -15,11 +15,11 @@ type GameStatusResponse struct {
 }
 
 type GameStatusHandler struct {
-	playerRepo *models.PlayerRepository
+	playerService *player.Service
 }
 
-func NewGameStatusHandler(playerRepo *models.PlayerRepository) *GameStatusHandler {
-	return &GameStatusHandler{playerRepo: playerRepo}
+func NewGameStatusHandler(playerService *player.Service) *GameStatusHandler {
+	return &GameStatusHandler{playerService: playerService}
 }
 
 func (h *GameStatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -28,7 +28,7 @@ func (h *GameStatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	
 	w.Header().Set("Content-Type", "application/json")
 
-	playerCount, err := h.playerRepo.GetPlayerCount()
+	playerCount, err := h.playerService.GetPlayerCount()
 	if err != nil {
 		logger.Warn("Failed to get player count", "error", err)
 		playerCount = 0

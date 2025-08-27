@@ -10,7 +10,7 @@ import (
 
 	"planets-server/internal/auth"
 	"planets-server/internal/middleware"
-	"planets-server/internal/models"
+	"planets-server/internal/player"
 	"planets-server/internal/server"
 	"planets-server/internal/shared/config"
 	"planets-server/internal/shared/database"
@@ -47,11 +47,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	playerRepo := models.NewPlayerRepository(db.DB)
+	playerRepo := player.NewRepository(db.DB)
+	playerService := player.NewService(playerRepo)
+	authRepo := auth.NewRepository(db.DB)
+	authService := auth.NewService(authRepo)
 
 	corsMiddleware := initCORS()
 
-	routes := server.NewRoutes(db, playerRepo, oauthConfig)
+	routes := server.NewRoutes(db, playerService, authService, oauthConfig)
 	mux := routes.Setup()
 	handler := corsMiddleware.Handler(mux)
 

@@ -8,21 +8,23 @@ import (
 	authHandlers "planets-server/internal/auth/handlers"
 	"planets-server/internal/handlers"
 	"planets-server/internal/middleware"
-	"planets-server/internal/models"
+	"planets-server/internal/player"
 	"planets-server/internal/shared/database"
 )
 
 type Routes struct {
-	db         *database.DB
-	playerRepo *models.PlayerRepository
-	oauthConfig *auth.OAuthConfig
+	db            *database.DB
+	playerService *player.Service
+	authService   *auth.Service
+	oauthConfig   *auth.OAuthConfig
 }
 
-func NewRoutes(db *database.DB, playerRepo *models.PlayerRepository, oauthConfig *auth.OAuthConfig) *Routes {
+func NewRoutes(db *database.DB, playerService *player.Service, authService *auth.Service, oauthConfig *auth.OAuthConfig) *Routes {
 	return &Routes{
-		db:         db,
-		playerRepo: playerRepo,
-		oauthConfig: oauthConfig,
+		db:            db,
+		playerService: playerService,
+		authService:   authService,
+		oauthConfig:   oauthConfig,
 	}
 }
 
@@ -34,20 +36,22 @@ func (r *Routes) Setup() *http.ServeMux {
 
 	// Initialize API handlers
 	healthHandler := handlers.NewHealthHandler(r.db)
-	gameStatusHandler := handlers.NewGameStatusHandler(r.playerRepo)
-	playersHandler := handlers.NewPlayersHandler(r.playerRepo)
-	meHandler := handlers.NewMeHandler()
+	gameStatusHandler := handlers.NewGameStatusHandler(r.playerService)
+	playersHandler := player.NewPlayersHandler(r.playerService)
+	meHandler := player.NewMeHandler()
 	logoutHandler := handlers.NewLogoutHandler()
 
 	// Initialize OAuth handlers
 	googleAuthHandler := authHandlers.NewGoogleAuthHandler(
 		r.oauthConfig.GoogleProvider, 
-		r.playerRepo, 
+		r.playerService,
+		r.authService,
 		r.oauthConfig.GoogleConfigured,
 	)
 	githubAuthHandler := authHandlers.NewGitHubAuthHandler(
 		r.oauthConfig.GitHubProvider, 
-		r.playerRepo, 
+		r.playerService,
+		r.authService,
 		r.oauthConfig.GitHubConfigured,
 	)
 

@@ -10,22 +10,24 @@ import (
 
 	"planets-server/internal/auth"
 	"planets-server/internal/auth/providers"
-	"planets-server/internal/models"
+	"planets-server/internal/player"
 	"planets-server/internal/utils"
 )
 
 type GitHubAuthHandler struct {
-	provider     *providers.GitHubProvider
-	playerRepo   *models.PlayerRepository
-	isConfigured bool
+	provider        *providers.GitHubProvider
+	playerService   *player.Service
+	authService     *auth.Service
+	isConfigured    bool
 }
 
 // NewGitHubAuthHandler creates a new GitHub OAuth handler
-func NewGitHubAuthHandler(provider *providers.GitHubProvider, playerRepo *models.PlayerRepository, isConfigured bool) *GitHubAuthHandler {
+func NewGitHubAuthHandler(provider *providers.GitHubProvider, playerService *player.Service, authService *auth.Service, isConfigured bool) *GitHubAuthHandler {
 	return &GitHubAuthHandler{
-		provider:     provider,
-		playerRepo:   playerRepo,
-		isConfigured: isConfigured,
+		provider:        provider,
+		playerService:   playerService,
+		authService:     authService,
+		isConfigured:    isConfigured,
 	}
 }
 
@@ -144,19 +146,48 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 
 	// Create/find player
 	userLogger.Info("Creating or finding player account for GitHub user")
-	player, err := h.playerRepo.FindOrCreatePlayerByOAuth(
-		"github",
-		strconv.Itoa(userInfo.ID), // Convert int to string
-		userInfo.Email,
-		userInfo.Name,
-		&userInfo.AvatarURL,
-	)
+	
+	githubUserID := strconv.Itoa(userInfo.ID)
+	
+	// First check if auth provider exists
+	existingPlayerID, err := h.authService.FindPlayerByAuthProvider("github", githubUserID)
 	if err != nil {
-		userLogger.Error("Failed to create or find player account",
-			"error", err,
-			"provider", "github")
-		redirectWithError(w, r, "database_error", "Failed to create user account")
+		userLogger.Error("Failed to check auth provider", "error", err)
+		redirectWithError(w, r, "database_error", "Failed to authenticate user")
 		return
+	}
+	
+	var player *player.Player
+	if existingPlayerID > 0 {
+		// Player exists via OAuth
+		player, err = h.playerService.GetPlayerByID(existingPlayerID)
+		if err != nil {
+			userLogger.Error("Failed to get existing player", "error", err)
+			redirectWithError(w, r, "database_error", "Failed to get user account")
+			return
+		}
+	} else {
+		// Find or create player
+		player, err = h.playerService.FindOrCreatePlayerByOAuth(
+			"github",
+			githubUserID,
+			userInfo.Email,
+			userInfo.Name,
+			&userInfo.AvatarURL,
+		)
+		if err != nil {
+			userLogger.Error("Failed to create player", "error", err)
+			redirectWithError(w, r, "database_error", "Failed to create user account")
+			return
+		}
+		
+		// Link auth provider
+		err = h.authService.CreateAuthProvider(player.ID, "github", githubUserID, userInfo.Email)
+		if err != nil {
+			userLogger.Error("Failed to create auth provider", "error", err)
+			redirectWithError(w, r, "database_error", "Failed to link account")
+			return
+		}
 	}
 
 	// Add player context to logger
@@ -164,7 +195,7 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 
 	// Generate JWT
 	playerLogger.Debug("Generating JWT token for player")
-	jwtToken, err := auth.GenerateJWT(player)
+	jwtToken, err := h.authService.GenerateJWT(player.ID, player.Username, player.Email)
 	if err != nil {
 		playerLogger.Error("Failed to generate JWT token", "error", err)
 		redirectWithError(w, r, "auth_error", "Failed to create authentication token")
