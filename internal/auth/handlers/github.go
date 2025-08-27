@@ -196,7 +196,7 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 
 	// Generate JWT
 	playerLogger.Debug("Generating JWT token for player")
-	jwtToken, err := h.authService.GenerateJWT(player.ID, player.Username, player.Email)
+	jwtToken, err := auth.GenerateJWT(player.ID, player.Username, player.Email)
 	if err != nil {
 		playerLogger.Error("Failed to generate JWT token", "error", err)
 		redirectWithError(w, r, "auth_error", "Failed to create authentication token")
