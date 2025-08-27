@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-
-	"planets-server/internal/utils"
+	"planets-server/internal/shared/config"
 )
 
 type ErrorResponse struct {
@@ -36,12 +35,12 @@ func sendErrorResponse(w http.ResponseWriter, statusCode int, errorType, message
 
 // redirectWithError redirects to frontend with error parameters
 func redirectWithError(w http.ResponseWriter, r *http.Request, errorType, message string) {
-	frontendURL := utils.GetEnv("FRONTEND_URL", "http://localhost:3000")
+	cfg := config.GlobalConfig
 	errorURL := fmt.Sprintf("%s/auth/error?error=%s&message=%s", 
-		frontendURL, errorType, message)
+		cfg.Frontend.URL, errorType, message)
 	
 	slog.Debug("Redirecting to frontend with error",
-		"frontend_url", frontendURL,
+		"frontend_url", cfg.Frontend.URL,
 		"error_type", errorType,
 		"message", message)
 	

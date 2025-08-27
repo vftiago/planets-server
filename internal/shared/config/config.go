@@ -2,7 +2,7 @@ package config
 
 import (
 	"fmt"
-	"os"
+	"planets-server/internal/shared/utils"
 	"strconv"
 	"time"
 
@@ -111,14 +111,14 @@ func load() (*Config, error) {
 }
 
 func loadServerConfig() ServerConfig {
-	readTimeout, _ := strconv.Atoi(getEnv("SERVER_READ_TIMEOUT_SECONDS", "15"))
-	writeTimeout, _ := strconv.Atoi(getEnv("SERVER_WRITE_TIMEOUT_SECONDS", "15"))
-	idleTimeout, _ := strconv.Atoi(getEnv("SERVER_IDLE_TIMEOUT_SECONDS", "60"))
+	readTimeout, _ := strconv.Atoi(utils.GetEnv("SERVER_READ_TIMEOUT_SECONDS", "15"))
+	writeTimeout, _ := strconv.Atoi(utils.GetEnv("SERVER_WRITE_TIMEOUT_SECONDS", "15"))
+	idleTimeout, _ := strconv.Atoi(utils.GetEnv("SERVER_IDLE_TIMEOUT_SECONDS", "60"))
 
 	return ServerConfig{
-		Port:         getEnv("PORT", "8080"),
-		BaseURL:      getEnv("BASE_URL", "http://localhost:8080"),
-		Environment:  getEnv("ENVIRONMENT", "development"),
+		Port:         utils.GetEnv("PORT", "8080"),
+		BaseURL:      utils.GetEnv("BASE_URL", "http://localhost:8080"),
+		Environment:  utils.GetEnv("ENVIRONMENT", "development"),
 		ReadTimeout:  time.Duration(readTimeout) * time.Second,
 		WriteTimeout: time.Duration(writeTimeout) * time.Second,
 		IdleTimeout:  time.Duration(idleTimeout) * time.Second,
@@ -126,51 +126,51 @@ func loadServerConfig() ServerConfig {
 }
 
 func loadDatabaseConfig() DatabaseConfig {
-	maxOpenConns, _ := strconv.Atoi(getEnv("DB_MAX_OPEN_CONNS", "25"))
-	maxIdleConns, _ := strconv.Atoi(getEnv("DB_MAX_IDLE_CONNS", "5"))
-	connMaxLifetime, _ := strconv.Atoi(getEnv("DB_CONN_MAX_LIFETIME_MINUTES", "5"))
+	maxOpenConns, _ := strconv.Atoi(utils.GetEnv("DB_MAX_OPEN_CONNS", "25"))
+	maxIdleConns, _ := strconv.Atoi(utils.GetEnv("DB_MAX_IDLE_CONNS", "5"))
+	connMaxLifetime, _ := strconv.Atoi(utils.GetEnv("DB_CONN_MAX_LIFETIME_MINUTES", "5"))
 
 	return DatabaseConfig{
-		Host:                getEnv("DB_HOST", "localhost"),
-		Port:                getEnv("DB_PORT", "5432"),
-		User:                getEnv("DB_USER", "postgres"),
-		Password:            getEnv("DB_PASSWORD", "postgres"),
-		Name:                getEnv("DB_NAME", "planets"),
-		SSLMode:             getEnv("DB_SSLMODE", "disable"),
+		Host:                utils.GetEnv("DB_HOST", "localhost"),
+		Port:                utils.GetEnv("DB_PORT", "5432"),
+		User:                utils.GetEnv("DB_USER", "postgres"),
+		Password:            utils.GetEnv("DB_PASSWORD", "postgres"),
+		Name:                utils.GetEnv("DB_NAME", "planets"),
+		SSLMode:             utils.GetEnv("DB_SSLMODE", "disable"),
 		MaxOpenConns:        maxOpenConns,
 		MaxIdleConns:        maxIdleConns,
 		ConnMaxLifetime:     time.Duration(connMaxLifetime) * time.Minute,
-		MigrationsPath:      getEnv("DB_MIGRATIONS_PATH", "migrations"),
+		MigrationsPath:      utils.GetEnv("DB_MIGRATIONS_PATH", "migrations"),
 	}
 }
 
 func loadAuthConfig() AuthConfig {
-	tokenExpiration, _ := strconv.Atoi(getEnv("JWT_EXPIRATION_HOURS", "24"))
+	tokenExpiration, _ := strconv.Atoi(utils.GetEnv("JWT_EXPIRATION_HOURS", "24"))
 	
-	environment := getEnv("ENVIRONMENT", "development")
+	environment := utils.GetEnv("ENVIRONMENT", "development")
 	cookieSecure := environment == "production"
 	
 	return AuthConfig{
-		JWTSecret:       getEnv("JWT_SECRET", ""),
+		JWTSecret:       utils.GetEnv("JWT_SECRET", ""),
 		TokenExpiration: time.Duration(tokenExpiration) * time.Hour,
 		CookieSecure:    cookieSecure,
-		CookieSameSite:  getEnv("COOKIE_SAME_SITE", "lax"),
+		CookieSameSite:  utils.GetEnv("COOKIE_SAME_SITE", "lax"),
 	}
 }
 
 func loadOAuthConfig() OAuthConfig {
-	baseURL := getEnv("BASE_URL", "http://localhost:8080")
+	baseURL := utils.GetEnv("BASE_URL", "http://localhost:8080")
 	
 	return OAuthConfig{
 		Google: GoogleOAuthConfig{
-			ClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
-			ClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
+			ClientID:     utils.GetEnv("GOOGLE_CLIENT_ID", ""),
+			ClientSecret: utils.GetEnv("GOOGLE_CLIENT_SECRET", ""),
 			RedirectURL:  baseURL + "/auth/google/callback",
 			Scopes:       []string{"openid", "profile", "email"},
 		},
 		GitHub: GitHubOAuthConfig{
-			ClientID:     getEnv("GITHUB_CLIENT_ID", ""),
-			ClientSecret: getEnv("GITHUB_CLIENT_SECRET", ""),
+			ClientID:     utils.GetEnv("GITHUB_CLIENT_ID", ""),
+			ClientSecret: utils.GetEnv("GITHUB_CLIENT_SECRET", ""),
 			RedirectURL:  baseURL + "/auth/github/callback",
 			Scopes:       []string{"user:email"},
 		},
@@ -178,21 +178,21 @@ func loadOAuthConfig() OAuthConfig {
 }
 
 func loadFrontendConfig() FrontendConfig {
-	corsDebug := getEnv("CORS_DEBUG", "") == "true"
+	corsDebug := utils.GetEnv("CORS_DEBUG", "") == "true"
 	
 	return FrontendConfig{
-		URL:       getEnv("FRONTEND_URL", "http://localhost:3000"),
+		URL:       utils.GetEnv("FRONTEND_URL", "http://localhost:3000"),
 		CORSDebug: corsDebug,
 	}
 }
 
 func loadLoggingConfig() LoggingConfig {
-	environment := getEnv("ENVIRONMENT", "development")
+	environment := utils.GetEnv("ENVIRONMENT", "development")
 	jsonFormat := environment == "production"
 	
 	return LoggingConfig{
-		Level:      getEnv("LOG_LEVEL", "debug"),
-		Format:     getEnv("LOG_FORMAT", "text"),
+		Level:      utils.GetEnv("LOG_LEVEL", "debug"),
+		Format:     utils.GetEnv("LOG_FORMAT", "text"),
 		JSONFormat: jsonFormat,
 	}
 }
@@ -250,11 +250,4 @@ func (c *Config) ConnectionString() string {
 		c.Database.Name,
 		c.Database.SSLMode,
 	)
-}
-
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
 }

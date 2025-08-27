@@ -11,7 +11,8 @@ import (
 	"planets-server/internal/auth"
 	"planets-server/internal/auth/providers"
 	"planets-server/internal/player"
-	"planets-server/internal/utils"
+	"planets-server/internal/shared/config"
+	"planets-server/internal/shared/cookies"
 )
 
 type GitHubAuthHandler struct {
@@ -203,7 +204,7 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Set HttpOnly cookie
-	utils.SetAuthCookie(w, jwtToken)
+	cookies.SetAuthCookie(w, jwtToken)
 
 	// Check if this is a newly created player
 	isNewPlayer := time.Since(player.CreatedAt) < time.Minute
@@ -213,7 +214,7 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 		"new_player", isNewPlayer,
 		"player_username", player.Username)
 	
-	frontendURL := utils.GetEnv("FRONTEND_URL", "http://localhost:3000")
-	successURL := fmt.Sprintf("%s/auth/callback?success=true", frontendURL)
+	cfg := config.GlobalConfig
+	successURL := fmt.Sprintf("%s/auth/callback?success=true", cfg.Frontend.URL)
 	http.Redirect(w, r, successURL, http.StatusTemporaryRedirect)
 }
