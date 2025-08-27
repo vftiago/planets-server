@@ -48,7 +48,7 @@ This is a Go web server for the "Planets!" turn-based space strategy game with t
 
 - **Entry Point**: `cmd/server/main.go` - Main application with graceful shutdown
 - **Internal Package**: All business logic under `internal/` to prevent external imports
-- **Shared Components**: Common utilities in `internal/shared/` (config, database, logger)
+- **Shared Components**: Common utilities in `internal/shared/` (config, database, logger, utils)
 
 ```text
 internal/
@@ -61,12 +61,24 @@ internal/
   │   ├── jwt.go
   │   ├── oauth.go
   │   └── state.go
-  ├── player/                   # Player domain (separate from auth)
+  ├── handlers/                 # HTTP handlers
+  │   ├── health.go             # Health check handler
+  │   ├── logout.go             # Logout handler
+  │   └── status.go             # Game status handler
+  ├── middleware/               # HTTP middleware
+  │   ├── auth.go
+  │   ├── cors.go
+  │   └── rate_limit.go
+  ├── player/                   # Player domain
   │   ├── models.go             # Player, PlayerAuthProvider structs
   │   ├── repository.go         # Player database operations
   │   ├── service.go            # Player business logic
   │   ├── handlers.go           # Player HTTP handlers
   │   └── errors.go             # Player-specific errors
+  ├── server/                   # HTTP server setup
+  │   ├── routes.go             # Route definitions
+  │   ├── server.go             # HTTP server setup and start
+  │   └── middleware.go         # Middleware setup
   ├── game/                     # Game domain (future)
   │   ├── models.go             # Game, Turn, Fleet structs
   │   ├── repository.go         # Game database operations
@@ -81,29 +93,23 @@ internal/
   │       ├── publisher.go
   │       └── handlers.go
   ├── shared/                   # Common utilities and infrastructure
+  │   └── config/               # Configuration management
+  │   │   └── config.go
+  │   ├── cookies/
+  │   │   └── cookies.go        # Cookie helpers
   │   ├── database/             # Database connection, migrations
   │   │   ├── connection.go
   │   │   ├── migrations.go
   │   │   └── transaction.go    # Transaction helpers
-  │   ├── middleware/           # HTTP middleware
-  │   │   ├── auth.go
-  │   │   ├── cors.go
-  │   │   ├── logging.go
-  │   │   └── rate_limit.go
+  |   ├── logger/               # Logging setup
+  │   │   └── logger.go
   │   ├── utils/                # Generic utilities
   │   │   ├── env.go
-  │   │   ├── cookies.go
   │   │   ├── validation.go
   │   │   └── crypto.go
-  │   ├── errors/               # Common error types and handling
+  │   ├── errors/               # Common error types and handling (future)
   │   │   ├── types.go
   │   │   └── handler.go
-  │   └── config/               # Configuration management
-  │       └── config.go
-  ├── server/                   # HTTP server setup
-  │   ├── routes.go
-  │   ├── server.go
-  │   └── middleware.go         # Middleware setup
   └── api/                      # API layer (future - for API versioning)
       └── v1/
           ├── auth.go
