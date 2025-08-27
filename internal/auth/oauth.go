@@ -47,7 +47,7 @@ func InitOAuth() *OAuthConfig {
 	googleProvider := providers.NewGoogleProvider(googleConfig)
 
 	logger.Info("OAuth configuration completed",
-		"base_url", cfg.Server.BaseURL,
+		"server_url", cfg.Server.URL,
 		"github_configured", githubConfigured,
 		"google_configured", googleConfigured,
 		"github_redirect", githubConfig.RedirectURL,

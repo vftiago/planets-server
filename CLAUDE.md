@@ -185,7 +185,7 @@ Key environment variables (see `internal/shared/config/config.go` for complete l
 - `GOOGLE_CLIENT_ID/SECRET`: Google OAuth credentials
 - `GITHUB_CLIENT_ID/SECRET`: GitHub OAuth credentials
 - `FRONTEND_URL`: Frontend URL for CORS
-- `BASE_URL`: Server base URL for OAuth redirects
+- `SERVER_URL`: Server URL for OAuth redirects
 
 ## Development Notes
 

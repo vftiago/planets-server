@@ -10,17 +10,18 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	Auth     AuthConfig
-	OAuth    OAuthConfig
-	Frontend FrontendConfig
-	Logging  LoggingConfig
+	Server    ServerConfig
+	Database  DatabaseConfig
+	Auth      AuthConfig
+	OAuth     OAuthConfig
+	Frontend  FrontendConfig
+	Logging   LoggingConfig
+	RateLimit RateLimitConfig
 }
 
 type ServerConfig struct {
 	Port         string
-	BaseURL      string
+	URL    string
 	Environment  string
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
@@ -77,6 +78,12 @@ type LoggingConfig struct {
 	JSONFormat bool
 }
 
+type RateLimitConfig struct {
+	Enabled           bool
+	RequestsPerSecond float64
+	BurstSize         int
+}
+
 var GlobalConfig *Config
 
 func Init() error {
@@ -99,12 +106,13 @@ func Init() error {
 
 func load() (*Config, error) {
 	config := &Config{
-		Server:   loadServerConfig(),
-		Database: loadDatabaseConfig(),
-		Auth:     loadAuthConfig(),
-		OAuth:    loadOAuthConfig(),
-		Frontend: loadFrontendConfig(),
-		Logging:  loadLoggingConfig(),
+		Server:    loadServerConfig(),
+		Database:  loadDatabaseConfig(),
+		Auth:      loadAuthConfig(),
+		OAuth:     loadOAuthConfig(),
+		Frontend:  loadFrontendConfig(),
+		Logging:   loadLoggingConfig(),
+		RateLimit: loadRateLimitConfig(),
 	}
 
 	return config, nil
@@ -116,8 +124,8 @@ func loadServerConfig() ServerConfig {
 	idleTimeout, _ := strconv.Atoi(utils.GetEnv("SERVER_IDLE_TIMEOUT_SECONDS", "60"))
 
 	return ServerConfig{
-		Port:         utils.GetEnv("PORT", "8080"),
-		BaseURL:      utils.GetEnv("BASE_URL", "http://localhost:8080"),
+		Port:         utils.GetEnv("SERVER_PORT", "8080"),
+		URL:          utils.GetEnv("SERVER_URL", "http://localhost:8080"),
 		Environment:  utils.GetEnv("ENVIRONMENT", "development"),
 		ReadTimeout:  time.Duration(readTimeout) * time.Second,
 		WriteTimeout: time.Duration(writeTimeout) * time.Second,
@@ -159,19 +167,19 @@ func loadAuthConfig() AuthConfig {
 }
 
 func loadOAuthConfig() OAuthConfig {
-	baseURL := utils.GetEnv("BASE_URL", "http://localhost:8080")
+	serverURL := utils.GetEnv("SERVER_URL", "http://localhost:8080")
 
 	return OAuthConfig{
 		Google: GoogleOAuthConfig{
 			ClientID:     utils.GetEnv("GOOGLE_CLIENT_ID", ""),
 			ClientSecret: utils.GetEnv("GOOGLE_CLIENT_SECRET", ""),
-			RedirectURL:  baseURL + "/auth/google/callback",
+			RedirectURL:  serverURL + "/auth/google/callback",
 			Scopes:       []string{"openid", "profile", "email"},
 		},
 		GitHub: GitHubOAuthConfig{
 			ClientID:     utils.GetEnv("GITHUB_CLIENT_ID", ""),
 			ClientSecret: utils.GetEnv("GITHUB_CLIENT_SECRET", ""),
-			RedirectURL:  baseURL + "/auth/github/callback",
+			RedirectURL:  serverURL + "/auth/github/callback",
 			Scopes:       []string{"user:email"},
 		},
 	}
@@ -197,6 +205,18 @@ func loadLoggingConfig() LoggingConfig {
 	}
 }
 
+func loadRateLimitConfig() RateLimitConfig {
+	enabled := utils.GetEnv("RATE_LIMIT_ENABLED", "true") == "true"
+	requestsPerSecond, _ := strconv.ParseFloat(utils.GetEnv("RATE_LIMIT_REQUESTS_PER_SECOND", "10"), 64)
+	burstSize, _ := strconv.Atoi(utils.GetEnv("RATE_LIMIT_BURST_SIZE", "20"))
+
+	return RateLimitConfig{
+		Enabled:           enabled,
+		RequestsPerSecond: requestsPerSecond,
+		BurstSize:         burstSize,
+	}
+}
+
 func (c *Config) validate() error {
 	if c.Auth.JWTSecret == "" {
 		return fmt.Errorf("JWT_SECRET is required")
@@ -207,7 +227,7 @@ func (c *Config) validate() error {
 	}
 
 	if c.Server.Port == "" {
-		return fmt.Errorf("PORT is required")
+		return fmt.Errorf("SERVER_PORT is required")
 	}
 
 	if c.Database.Host == "" {
@@ -218,8 +238,8 @@ func (c *Config) validate() error {
 		return fmt.Errorf("DB_NAME is required")
 	}
 
-	if c.Server.BaseURL == "" {
-		return fmt.Errorf("BASE_URL is required")
+	if c.Server.URL == "" {
+		return fmt.Errorf("SERVER_URL is required")
 	}
 
 	return nil

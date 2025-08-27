@@ -57,10 +57,11 @@ func main() {
 	authService := auth.NewService(authRepo)
 
 	corsMiddleware := initCORS()
+	rateLimiter := initRateLimit()
 
 	routes := server.NewRoutes(db, playerService, authService, oauthConfig)
 	mux := routes.Setup()
-	handler := corsMiddleware.Handler(mux)
+	handler := rateLimiter.Middleware(corsMiddleware.Handler(mux))
 
 	httpServer := createHTTPServer(handler)
 
@@ -115,6 +116,28 @@ func initCORS() *middleware.CORSMiddleware {
 	)
 
 	return corsMiddleware
+}
+
+func initRateLimit() *middleware.RateLimiter {
+	cfg := config.GlobalConfig
+	logger := slog.With("component", "rate_limit", "operation", "init")
+	logger.Debug("Setting up rate limiting middleware")
+
+	rateLimitConfig := middleware.RateLimitConfig{
+		Enabled:           cfg.RateLimit.Enabled,
+		RequestsPerSecond: cfg.RateLimit.RequestsPerSecond,
+		BurstSize:         cfg.RateLimit.BurstSize,
+	}
+
+	rateLimiter := middleware.NewRateLimiter(rateLimitConfig)
+
+	logger.Info("Rate limiting middleware configured",
+		"enabled", rateLimitConfig.Enabled,
+		"requests_per_second", rateLimitConfig.RequestsPerSecond,
+		"burst_size", rateLimitConfig.BurstSize,
+	)
+
+	return rateLimiter
 }
 
 func createHTTPServer(handler http.Handler) *http.Server {
