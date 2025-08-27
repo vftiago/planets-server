@@ -28,16 +28,16 @@ type ServerConfig struct {
 }
 
 type DatabaseConfig struct {
-	Host                string
-	Port                string
-	User                string
-	Password            string
-	Name                string
-	SSLMode             string
-	MaxOpenConns        int
-	MaxIdleConns        int
-	ConnMaxLifetime     time.Duration
-	MigrationsPath      string
+	Host            string
+	Port            string
+	User            string
+	Password        string
+	Name            string
+	SSLMode         string
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
+	MigrationsPath  string
 }
 
 type AuthConfig struct {
@@ -131,25 +131,25 @@ func loadDatabaseConfig() DatabaseConfig {
 	connMaxLifetime, _ := strconv.Atoi(utils.GetEnv("DB_CONN_MAX_LIFETIME_MINUTES", "5"))
 
 	return DatabaseConfig{
-		Host:                utils.GetEnv("DB_HOST", "localhost"),
-		Port:                utils.GetEnv("DB_PORT", "5432"),
-		User:                utils.GetEnv("DB_USER", "postgres"),
-		Password:            utils.GetEnv("DB_PASSWORD", "postgres"),
-		Name:                utils.GetEnv("DB_NAME", "planets"),
-		SSLMode:             utils.GetEnv("DB_SSLMODE", "disable"),
-		MaxOpenConns:        maxOpenConns,
-		MaxIdleConns:        maxIdleConns,
-		ConnMaxLifetime:     time.Duration(connMaxLifetime) * time.Minute,
-		MigrationsPath:      utils.GetEnv("DB_MIGRATIONS_PATH", "migrations"),
+		Host:            utils.GetEnv("DB_HOST", "localhost"),
+		Port:            utils.GetEnv("DB_PORT", "5432"),
+		User:            utils.GetEnv("DB_USER", "postgres"),
+		Password:        utils.GetEnv("DB_PASSWORD", "postgres"),
+		Name:            utils.GetEnv("DB_NAME", "planets"),
+		SSLMode:         utils.GetEnv("DB_SSLMODE", "disable"),
+		MaxOpenConns:    maxOpenConns,
+		MaxIdleConns:    maxIdleConns,
+		ConnMaxLifetime: time.Duration(connMaxLifetime) * time.Minute,
+		MigrationsPath:  utils.GetEnv("DB_MIGRATIONS_PATH", "migrations"),
 	}
 }
 
 func loadAuthConfig() AuthConfig {
 	tokenExpiration, _ := strconv.Atoi(utils.GetEnv("JWT_EXPIRATION_HOURS", "24"))
-	
+
 	environment := utils.GetEnv("ENVIRONMENT", "development")
 	cookieSecure := environment == "production"
-	
+
 	return AuthConfig{
 		JWTSecret:       utils.GetEnv("JWT_SECRET", ""),
 		TokenExpiration: time.Duration(tokenExpiration) * time.Hour,
@@ -160,7 +160,7 @@ func loadAuthConfig() AuthConfig {
 
 func loadOAuthConfig() OAuthConfig {
 	baseURL := utils.GetEnv("BASE_URL", "http://localhost:8080")
-	
+
 	return OAuthConfig{
 		Google: GoogleOAuthConfig{
 			ClientID:     utils.GetEnv("GOOGLE_CLIENT_ID", ""),
@@ -179,7 +179,7 @@ func loadOAuthConfig() OAuthConfig {
 
 func loadFrontendConfig() FrontendConfig {
 	corsDebug := utils.GetEnv("CORS_DEBUG", "") == "true"
-	
+
 	return FrontendConfig{
 		URL:       utils.GetEnv("FRONTEND_URL", "http://localhost:3000"),
 		CORSDebug: corsDebug,
@@ -189,7 +189,7 @@ func loadFrontendConfig() FrontendConfig {
 func loadLoggingConfig() LoggingConfig {
 	environment := utils.GetEnv("ENVIRONMENT", "development")
 	jsonFormat := environment == "production"
-	
+
 	return LoggingConfig{
 		Level:      utils.GetEnv("LOG_LEVEL", "debug"),
 		Format:     utils.GetEnv("LOG_FORMAT", "text"),
@@ -201,27 +201,27 @@ func (c *Config) validate() error {
 	if c.Auth.JWTSecret == "" {
 		return fmt.Errorf("JWT_SECRET is required")
 	}
-	
+
 	if len(c.Auth.JWTSecret) < 32 {
 		return fmt.Errorf("JWT_SECRET must be at least 32 characters long")
 	}
-	
+
 	if c.Server.Port == "" {
 		return fmt.Errorf("PORT is required")
 	}
-	
+
 	if c.Database.Host == "" {
 		return fmt.Errorf("DB_HOST is required")
 	}
-	
+
 	if c.Database.Name == "" {
 		return fmt.Errorf("DB_NAME is required")
 	}
-	
+
 	if c.Server.BaseURL == "" {
 		return fmt.Errorf("BASE_URL is required")
 	}
-	
+
 	return nil
 }
 

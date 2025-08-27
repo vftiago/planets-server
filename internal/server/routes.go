@@ -43,13 +43,13 @@ func (r *Routes) Setup() *http.ServeMux {
 
 	// Initialize OAuth handlers
 	googleAuthHandler := authHandlers.NewGoogleAuthHandler(
-		r.oauthConfig.GoogleProvider, 
+		r.oauthConfig.GoogleProvider,
 		r.playerService,
 		r.authService,
 		r.oauthConfig.GoogleConfigured,
 	)
 	githubAuthHandler := authHandlers.NewGitHubAuthHandler(
-		r.oauthConfig.GitHubProvider, 
+		r.oauthConfig.GitHubProvider,
 		r.playerService,
 		r.authService,
 		r.oauthConfig.GitHubConfigured,
@@ -59,7 +59,7 @@ func (r *Routes) Setup() *http.ServeMux {
 	mux.Handle("/api/health", healthHandler)
 	mux.Handle("/api/game/status", gameStatusHandler)
 	mux.Handle("/api/players", playersHandler)
-	
+
 	// Protected API endpoints
 	mux.Handle("/api/me", middleware.JWTMiddleware(meHandler))
 

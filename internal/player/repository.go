@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-	"strings"
 )
 
 type Repository struct {
@@ -47,7 +46,11 @@ func (r *Repository) GetAllPlayers() ([]Player, error) {
 		logger.Error("Failed to query players", "error", err)
 		return nil, fmt.Errorf("failed to query players: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			logger.Error("Failed to close rows", "error", err)
+		}
+	}()
 
 	var players []Player
 	for rows.Next() {
@@ -186,11 +189,4 @@ func (r *Repository) GetPlayerByID(id int) (*Player, error) {
 
 	logger.Debug("Found player by ID", "username", player.Username)
 	return &player, nil
-}
-
-func generateUsernameFromEmail(email string) string {
-	if idx := strings.Index(email, "@"); idx > 0 {
-		return email[:idx]
-	}
-	return "player"
 }

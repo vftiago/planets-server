@@ -30,7 +30,7 @@ func Connect() (*DB, error) {
 
 	sqlDB, err := sql.Open("postgres", cfg.ConnectionString())
 	if err != nil {
-		logger.Error("Failed to open database connection", 
+		logger.Error("Failed to open database connection",
 			"error", err, "host", cfg.Database.Host, "database", cfg.Database.Name)
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
@@ -41,9 +41,11 @@ func Connect() (*DB, error) {
 
 	logger.Debug("Testing database connection with ping")
 	if err := sqlDB.Ping(); err != nil {
-		logger.Error("Failed to ping database", 
+		logger.Error("Failed to ping database",
 			"error", err, "host", cfg.Database.Host, "database", cfg.Database.Name)
-		sqlDB.Close()
+		if closeErr := sqlDB.Close(); closeErr != nil {
+			logger.Error("Failed to close database after ping failure", "close_error", closeErr, "ping_error", err)
+		}
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 

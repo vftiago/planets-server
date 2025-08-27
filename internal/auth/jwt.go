@@ -13,13 +13,13 @@ import (
 func GenerateJWT(playerID int, username, email string) (string, error) {
 	cfg := config.GlobalConfig
 	logger := slog.With(
-		"component", "jwt", 
+		"component", "jwt",
 		"operation", "generate",
 		"player_id", playerID,
 		"username", username,
 	)
 	logger.Debug("Generating JWT token for player")
-	
+
 	expiresAt := time.Now().Add(cfg.Auth.TokenExpiration)
 	claims := Claims{
 		PlayerID: playerID,
@@ -38,7 +38,7 @@ func GenerateJWT(playerID int, username, email string) (string, error) {
 		logger.Error("Failed to sign JWT token", "error", err)
 		return "", fmt.Errorf("failed to sign JWT token: %w", err)
 	}
-	
+
 	logger.Debug("JWT token generated successfully", "expires_at", expiresAt)
 	return tokenString, nil
 }
@@ -48,7 +48,7 @@ func ValidateJWT(tokenString string) (*Claims, error) {
 	cfg := config.GlobalConfig
 	logger := slog.With("component", "jwt", "operation", "validate")
 	logger.Debug("Validating JWT token")
-	
+
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			logger.Error("Unexpected JWT signing method", "method", token.Header["alg"])
@@ -63,7 +63,7 @@ func ValidateJWT(tokenString string) (*Claims, error) {
 	}
 
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
-		logger.Debug("JWT token validated successfully", 
+		logger.Debug("JWT token validated successfully",
 			"player_id", claims.PlayerID,
 			"username", claims.Username,
 			"expires_at", claims.ExpiresAt.Time)

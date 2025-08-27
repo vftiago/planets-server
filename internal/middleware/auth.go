@@ -39,10 +39,10 @@ func JWTMiddleware(next http.Handler) http.Handler {
 
 		// Add user info to request context
 		ctx := context.WithValue(r.Context(), UserContextKey, claims)
-		logger.Debug("JWT authentication successful", 
-			"player_id", claims.PlayerID, 
+		logger.Debug("JWT authentication successful",
+			"player_id", claims.PlayerID,
 			"username", claims.Username)
-		
+
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

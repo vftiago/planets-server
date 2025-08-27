@@ -13,7 +13,7 @@ func SetAuthCookie(w http.ResponseWriter, token string) {
 	cookie := createAuthCookie()
 	cookie.Value = token
 	cookie.MaxAge = int(cfg.Auth.TokenExpiration.Seconds())
-	
+
 	http.SetCookie(w, cookie)
 }
 
@@ -21,7 +21,7 @@ func ClearAuthCookie(w http.ResponseWriter) {
 	cookie := createAuthCookie()
 	cookie.Value = ""
 	cookie.MaxAge = -1
-	
+
 	http.SetCookie(w, cookie)
 }
 
@@ -43,12 +43,12 @@ func extractDomain(frontendURL string) string {
 	if err != nil || parsedURL.Host == "" {
 		return ""
 	}
-	
+
 	host := strings.Split(parsedURL.Host, ":")[0]
 	if host == "localhost" || host == "127.0.0.1" {
 		return ""
 	}
-	
+
 	return host
 }
 

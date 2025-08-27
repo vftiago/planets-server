@@ -29,16 +29,20 @@ func NewGitHubProvider(config *oauth2.Config) *GitHubProvider {
 // GetUserInfo fetches user information from GitHub API
 func (p *GitHubProvider) GetUserInfo(ctx context.Context, token *oauth2.Token) (*GitHubUserInfo, error) {
 	client := p.config.Client(ctx, token)
-	
+
 	logger := slog.With("provider", "github", "operation", "get_user_info")
 	logger.Debug("Requesting user info from GitHub API")
-	
+
 	resp, err := client.Get("https://api.github.com/user")
 	if err != nil {
 		logger.Error("Failed to request user info from GitHub", "error", err)
 		return nil, fmt.Errorf("failed to request user info from GitHub: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Error("Failed to close response body", "error", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		logger.Error("GitHub API returned error status",
@@ -80,14 +84,18 @@ func (p *GitHubProvider) GetUserInfo(ctx context.Context, token *oauth2.Token) (
 // fetchUserEmail attempts to get the user's primary email from GitHub
 func (p *GitHubProvider) fetchUserEmail(ctx context.Context, client *http.Client, userInfo *GitHubUserInfo) error {
 	logger := slog.With("provider", "github", "operation", "fetch_email", "github_user_id", userInfo.ID)
-	
+
 	logger.Debug("Requesting email information from GitHub API")
 	emailResp, err := client.Get("https://api.github.com/user/emails")
 	if err != nil {
 		logger.Error("Failed to request emails from GitHub", "error", err)
 		return fmt.Errorf("failed to request emails from GitHub: %w", err)
 	}
-	defer emailResp.Body.Close()
+	defer func() {
+		if err := emailResp.Body.Close(); err != nil {
+			logger.Error("Failed to close email response body", "error", err)
+		}
+	}()
 
 	if emailResp.StatusCode != http.StatusOK {
 		logger.Error("GitHub emails API returned error status",
@@ -101,7 +109,7 @@ func (p *GitHubProvider) fetchUserEmail(ctx context.Context, client *http.Client
 		Primary  bool   `json:"primary"`
 		Verified bool   `json:"verified"`
 	}
-	
+
 	if err := json.NewDecoder(emailResp.Body).Decode(&emails); err != nil {
 		logger.Error("Failed to decode GitHub emails", "error", err)
 		return fmt.Errorf("failed to decode GitHub emails: %w", err)
@@ -135,13 +143,13 @@ func (p *GitHubProvider) fetchUserEmail(ctx context.Context, client *http.Client
 func (p *GitHubProvider) ExchangeCode(ctx context.Context, code string) (*oauth2.Token, error) {
 	logger := slog.With("provider", "github", "operation", "exchange_code")
 	logger.Debug("Exchanging authorization code for GitHub access token")
-	
+
 	token, err := p.config.Exchange(ctx, code)
 	if err != nil {
 		logger.Error("Failed to exchange GitHub authorization code", "error", err)
 		return nil, fmt.Errorf("failed to exchange authorization code: %w", err)
 	}
-	
+
 	logger.Debug("Successfully exchanged code for token")
 	return token, nil
 }

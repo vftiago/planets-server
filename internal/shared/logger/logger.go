@@ -13,9 +13,9 @@ func Init() {
 
 	logConfig := config.GlobalConfig.Logging
 	var handler slog.Handler
-	
+
 	level := parseLogLevel(logConfig.Level)
-	
+
 	if logConfig.JSONFormat {
 		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 			Level: level,
@@ -25,9 +25,9 @@ func Init() {
 			Level: level,
 		})
 	}
-	
+
 	slog.SetDefault(slog.New(handler))
-	
+
 	logger := slog.With("component", "logger")
 	logger.Debug("Logger initialized",
 		"level", logConfig.Level,

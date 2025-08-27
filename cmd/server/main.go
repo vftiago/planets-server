@@ -22,7 +22,7 @@ func main() {
 		slog.Error("Failed to initialize configuration", "error", err)
 		os.Exit(1)
 	}
-	
+
 	cfg := config.GlobalConfig
 
 	logger.Init()
@@ -34,13 +34,17 @@ func main() {
 	)
 
 	oauthConfig := initOAuth()
-	
+
 	db, err := initDatabase()
 	if err != nil {
 		logger.Error("Failed to initialize database", "error", err)
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			logger.Error("Failed to close database connection", "error", err)
+		}
+	}()
 
 	if err := db.RunMigrations(); err != nil {
 		logger.Error("Failed to run migrations", "error", err)
@@ -61,7 +65,7 @@ func main() {
 	httpServer := createHTTPServer(handler)
 
 	go startServer(httpServer, logger)
-	
+
 	waitForShutdown(httpServer, logger)
 }
 
@@ -71,7 +75,7 @@ func initOAuth() *auth.OAuthConfig {
 	logger.Debug("Initializing OAuth configurations")
 
 	oauthConfig := auth.InitOAuth()
-	
+
 	logger.Info("OAuth configuration completed",
 		"google_configured", cfg.GoogleOAuthConfigured(),
 		"github_configured", cfg.GitHubOAuthConfigured(),
@@ -131,7 +135,7 @@ func createHTTPServer(handler http.Handler) *http.Server {
 
 func startServer(server *http.Server, logger *slog.Logger) {
 	logger.Info("HTTP server starting", "addr", server.Addr)
-	
+
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Error("Server failed to start", "error", err, "addr", server.Addr)
 		os.Exit(1)
@@ -142,16 +146,16 @@ func waitForShutdown(server *http.Server, logger *slog.Logger) {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	
+
 	logger.Info("Shutting down server...")
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), config.GlobalConfig.Server.WriteTimeout)
 	defer cancel()
-	
+
 	if err := server.Shutdown(ctx); err != nil {
 		logger.Error("Server forced to shutdown", "error", err)
 		os.Exit(1)
 	}
-	
+
 	logger.Info("Server exited gracefully")
 }
