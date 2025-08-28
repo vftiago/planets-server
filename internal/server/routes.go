@@ -6,9 +6,11 @@ import (
 
 	"planets-server/internal/auth"
 	authHandlers "planets-server/internal/auth/handlers"
-	"planets-server/internal/handlers"
+	gameHandlers "planets-server/internal/game/handlers"
 	"planets-server/internal/middleware"
 	"planets-server/internal/player"
+	playerHandler "planets-server/internal/player/handlers"
+	serverHandlers "planets-server/internal/server/handlers"
 	"planets-server/internal/shared/database"
 )
 
@@ -35,11 +37,11 @@ func (r *Routes) Setup() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// Initialize API handlers
-	healthHandler := handlers.NewHealthHandler(r.db)
-	gameStatusHandler := handlers.NewGameStatusHandler(r.playerService)
-	playersHandler := player.NewPlayersHandler(r.playerService)
-	meHandler := player.NewMeHandler()
-	logoutHandler := handlers.NewLogoutHandler()
+	healthHandler := serverHandlers.NewHealthHandler(r.db)
+	gameStatusHandler := gameHandlers.NewGameStatusHandler(r.playerService)
+	playersHandler := playerHandler.NewPlayersHandler(r.playerService)
+	meHandler := playerHandler.NewMeHandler()
+	logoutHandler := authHandlers.NewLogoutHandler()
 
 	// Initialize OAuth handlers
 	googleAuthHandler := authHandlers.NewGoogleAuthHandler(

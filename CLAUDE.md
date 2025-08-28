@@ -59,39 +59,41 @@ internal/
   │   ├── repository.go         # Auth-specific database operations
   │   ├── service.go            # Auth business logic
   │   ├── jwt.go
+  │   ├── models.go
   │   ├── oauth.go
+  │   ├── repository.go
+  │   ├── service.go
   │   └── state.go
-  ├── handlers/                 # HTTP handlers
-  │   ├── health.go             # Health check handler
-  │   ├── logout.go             # Logout handler
-  │   └── status.go             # Game status handler
+  ├── game/                     # Game domain
+  │   ├── engine/               # Game engine components (future)
+  │   │   ├── combat.go
+  │   │   ├── movement.go
+  │   │   ├── production.go
+  │   │   └── turn_processor.go
+  │   ├── events/               # Game events system (future)
+  │   │   ├── publisher.go
+  │   │   └── handlers.go
+  │   ├── handlers/
+  │   │   └── status.go
+  │   ├── models.go             # Game, Turn, Fleet structs (future)
+  │   ├── repository.go         # Game database operations (future)
+  │   └── service.go            # Game business logic (turn processing, etc.) (future)
   ├── middleware/               # HTTP middleware
   │   ├── auth.go
   │   ├── cors.go
   │   └── rate_limit.go
   ├── player/                   # Player domain
+  │   ├── handlers/
+  │   │   ├── me.go
+  │   │   └── players.go
+  │   ├── errors.go             # Player-specific errors
   │   ├── models.go             # Player, PlayerAuthProvider structs
   │   ├── repository.go         # Player database operations
-  │   ├── service.go            # Player business logic
-  │   ├── handlers.go           # Player HTTP handlers
-  │   └── errors.go             # Player-specific errors
+  │   └── service.go            # Player business logic
   ├── server/                   # HTTP server setup
-  │   ├── routes.go             # Route definitions
-  │   ├── server.go             # HTTP server setup and start
-  │   └── middleware.go         # Middleware setup
-  ├── game/                     # Game domain (future)
-  │   ├── models.go             # Game, Turn, Fleet structs
-  │   ├── repository.go         # Game database operations
-  │   ├── service.go            # Game business logic (turn processing, etc.)
-  │   ├── handlers.go           # Game HTTP handlers
-  │   ├── engine/               # Game engine components
-  │   │   ├── combat.go
-  │   │   ├── movement.go
-  │   │   ├── production.go
-  │   │   └── turn_processor.go
-  │   └── events/               # Game events system
-  │       ├── publisher.go
-  │       └── handlers.go
+  │   ├── handlers/
+  │   │   └── health.go
+  │   └── routes.go             # Route definitions
   ├── shared/                   # Common utilities and infrastructure
   │   └── config/               # Configuration management
   │   │   └── config.go
@@ -100,17 +102,17 @@ internal/
   │   ├── database/             # Database connection, migrations
   │   │   ├── connection.go
   │   │   ├── migrations.go
-  │   │   └── transaction.go    # Transaction helpers
+  │   │   └── transaction.go    # Transaction helpers (future)
   |   ├── logger/               # Logging setup
   │   │   └── logger.go
   │   ├── utils/                # Generic utilities
   │   │   ├── env.go
-  │   │   ├── validation.go
-  │   │   └── crypto.go
+  │   │   ├── validation.go     # Validation helpers (future)
+  │   │   └── crypto.go         # Crypto helpers (e.g. secure random strings) (future)
   │   ├── errors/               # Common error types and handling (future)
   │   │   ├── types.go
   │   │   └── handler.go
-  └── api/                      # API layer (future - for API versioning)
+  └── api/                      # API layer (future - for API versioning - might not be necessary at all)
       └── v1/
           ├── auth.go
           ├── player.go
