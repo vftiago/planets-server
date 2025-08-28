@@ -19,14 +19,12 @@ type RateLimiter struct {
 	config  RateLimitConfig
 	clients map[string]*rate.Limiter
 	mu      sync.RWMutex
-	cleanup *time.Ticker
 }
 
 func NewRateLimiter(config RateLimitConfig) *RateLimiter {
 	rl := &RateLimiter{
 		config:  config,
 		clients: make(map[string]*rate.Limiter),
-		cleanup: time.NewTicker(time.Minute),
 	}
 
 	if config.Enabled {
@@ -53,7 +51,10 @@ func (rl *RateLimiter) getLimiter(ip string) *rate.Limiter {
 }
 
 func (rl *RateLimiter) cleanupClients() {
-	for range rl.cleanup.C {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
 		rl.mu.Lock()
 		// Remove clients that haven't been used recently
 		for ip, limiter := range rl.clients {
@@ -96,12 +97,6 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 		logger.Debug("Request allowed through rate limiter")
 		next.ServeHTTP(w, r)
 	})
-}
-
-func (rl *RateLimiter) Stop() {
-	if rl.cleanup != nil {
-		rl.cleanup.Stop()
-	}
 }
 
 func getClientIP(r *http.Request) string {
