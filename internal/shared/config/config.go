@@ -17,6 +17,7 @@ type Config struct {
 	Frontend  FrontendConfig
 	Logging   LoggingConfig
 	RateLimit RateLimitConfig
+	Universe	UniverseConfig
 }
 
 type ServerConfig struct {
@@ -84,6 +85,14 @@ type RateLimitConfig struct {
 	BurstSize         int
 }
 
+type UniverseConfig struct {
+	SectorCount         int
+	SystemsPerSector    int
+	MinPlanetsPerSystem int
+	MaxPlanetsPerSystem int
+	DefaultGalaxyName   string
+}
+
 var GlobalConfig *Config
 
 func Init() error {
@@ -113,6 +122,7 @@ func load() (*Config, error) {
 		Frontend:  loadFrontendConfig(),
 		Logging:   loadLoggingConfig(),
 		RateLimit: loadRateLimitConfig(),
+		Universe:  loadUniverseConfig(),
 	}
 
 	return config, nil
@@ -214,6 +224,21 @@ func loadRateLimitConfig() RateLimitConfig {
 		Enabled:           enabled,
 		RequestsPerSecond: requestsPerSecond,
 		BurstSize:         burstSize,
+	}
+}
+
+func loadUniverseConfig() UniverseConfig {
+	sectorCount, _ := strconv.Atoi(utils.GetEnv("UNIVERSE_SECTOR_COUNT", "16"))
+	systemsPerSector, _ := strconv.Atoi(utils.GetEnv("UNIVERSE_SYSTEMS_PER_SECTOR", "16"))
+	minPlanets, _ := strconv.Atoi(utils.GetEnv("UNIVERSE_MIN_PLANETS_PER_SYSTEM", "3"))
+	maxPlanets, _ := strconv.Atoi(utils.GetEnv("UNIVERSE_MAX_PLANETS_PER_SYSTEM", "12"))
+
+	return UniverseConfig{
+		SectorCount:         sectorCount,
+		SystemsPerSector:    systemsPerSector,
+		MinPlanetsPerSystem: minPlanets,
+		MaxPlanetsPerSystem: maxPlanets,
+		DefaultGalaxyName:   utils.GetEnv("UNIVERSE_DEFAULT_GALAXY_NAME", "Milky Way"),
 	}
 }
 
