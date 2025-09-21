@@ -1,11 +1,25 @@
-CREATE TABLE IF NOT EXISTS galaxies (
+CREATE TABLE IF NOT EXISTS games (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     description TEXT,
-    sector_count INTEGER NOT NULL DEFAULT 16,
-    is_active BOOLEAN NOT NULL DEFAULT true,
+    status VARCHAR(20) NOT NULL DEFAULT 'creating',
+    current_turn INTEGER NOT NULL DEFAULT 0,
+    max_players INTEGER NOT NULL DEFAULT 10,
+    turn_interval_hours INTEGER NOT NULL DEFAULT 1,
+    next_turn_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS galaxies (
+    id SERIAL PRIMARY KEY,
+    game_id INTEGER REFERENCES games(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    sector_count INTEGER NOT NULL DEFAULT 16,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(game_id)
 );
 
 CREATE TABLE IF NOT EXISTS sectors (
@@ -48,6 +62,9 @@ CREATE TABLE IF NOT EXISTS planets (
     UNIQUE(system_id, planet_index)
 );
 
+CREATE INDEX IF NOT EXISTS idx_games_status ON games(status);
+CREATE INDEX IF NOT EXISTS idx_games_next_turn ON games(next_turn_at) WHERE next_turn_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_galaxies_game_id ON galaxies(game_id);
 CREATE INDEX IF NOT EXISTS idx_sectors_galaxy_id ON sectors(galaxy_id);
 CREATE INDEX IF NOT EXISTS idx_sectors_coordinates ON sectors(galaxy_id, sector_x, sector_y);
 CREATE INDEX IF NOT EXISTS idx_systems_sector_id ON systems(sector_id);
@@ -90,7 +107,7 @@ CREATE TRIGGER trigger_update_system_planet_count
 
 CREATE TRIGGER trigger_update_sector_system_count
     AFTER INSERT OR DELETE ON systems
-    FOR EACH ROW EXECUTE FUNCTION trigger_update_sector_system_count();
+    FOR EACH ROW EXECUTE FUNCTION update_sector_system_count();
 
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -99,6 +116,9 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_games_updated_at BEFORE UPDATE ON games
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_galaxies_updated_at BEFORE UPDATE ON galaxies
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
