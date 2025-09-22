@@ -6,6 +6,7 @@ import (
 
 	"planets-server/internal/auth"
 	authHandlers "planets-server/internal/auth/handlers"
+	"planets-server/internal/game"
 	gameHandlers "planets-server/internal/game/handlers"
 	"planets-server/internal/middleware"
 	"planets-server/internal/player"
@@ -18,14 +19,16 @@ type Routes struct {
 	db            *database.DB
 	playerService *player.Service
 	authService   *auth.Service
+	gameService   *game.Service
 	oauthConfig   *auth.OAuthConfig
 }
 
-func NewRoutes(db *database.DB, playerService *player.Service, authService *auth.Service, oauthConfig *auth.OAuthConfig) *Routes {
+func NewRoutes(db *database.DB, playerService *player.Service, authService *auth.Service, gameService *game.Service, oauthConfig *auth.OAuthConfig) *Routes {
 	return &Routes{
 		db:            db,
 		playerService: playerService,
 		authService:   authService,
+		gameService:   gameService,
 		oauthConfig:   oauthConfig,
 	}
 }
@@ -36,14 +39,14 @@ func (r *Routes) Setup() *http.ServeMux {
 
 	mux := http.NewServeMux()
 
-	// Initialize API handlers
 	healthHandler := serverHandlers.NewHealthHandler(r.db)
 	gameStatusHandler := gameHandlers.NewGameStatusHandler(r.playerService)
 	playersHandler := playerHandler.NewPlayersHandler(r.playerService)
 	meHandler := playerHandler.NewMeHandler()
 	logoutHandler := authHandlers.NewLogoutHandler()
 
-	// Initialize OAuth handlers
+	gameHandler := gameHandlers.NewGameHandler(r.gameService)
+
 	googleAuthHandler := authHandlers.NewGoogleAuthHandler(
 		r.oauthConfig.GoogleProvider,
 		r.playerService,
@@ -62,6 +65,11 @@ func (r *Routes) Setup() *http.ServeMux {
 	mux.Handle("/api/game/status", gameStatusHandler)
 	mux.Handle("/api/players", playersHandler)
 
+	// Game endpoints
+	mux.HandleFunc("/api/games", gameHandler.GetGames)
+	mux.HandleFunc("/api/games/create", gameHandler.CreateGame)
+	mux.HandleFunc("/api/games/stats", gameHandler.GetGameStats)
+
 	// Protected API endpoints
 	mux.Handle("/api/me", middleware.JWTMiddleware(meHandler))
 
@@ -71,6 +79,12 @@ func (r *Routes) Setup() *http.ServeMux {
 	mux.HandleFunc("/auth/github", githubAuthHandler.HandleAuth)
 	mux.HandleFunc("/auth/github/callback", githubAuthHandler.HandleCallback)
 	mux.Handle("/auth/logout", logoutHandler)
+
+	logger.Info("Routes configured successfully",
+		"public_endpoints", []string{"/api/health", "/api/game/status", "/api/players", "/api/games", "/api/games/create", "/api/games/stats"},
+		"protected_endpoints", []string{"/api/me"},
+		"auth_endpoints", []string{"/auth/google", "/auth/github", "/auth/logout"},
+	)
 
 	return mux
 }

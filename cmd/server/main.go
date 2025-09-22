@@ -9,12 +9,17 @@ import (
 	"syscall"
 
 	"planets-server/internal/auth"
+	"planets-server/internal/galaxy"
+	"planets-server/internal/game"
 	"planets-server/internal/middleware"
+	"planets-server/internal/planet"
 	"planets-server/internal/player"
+	"planets-server/internal/sector"
 	"planets-server/internal/server"
 	"planets-server/internal/shared/config"
 	"planets-server/internal/shared/database"
 	"planets-server/internal/shared/logger"
+	"planets-server/internal/system"
 )
 
 func main() {
@@ -56,10 +61,18 @@ func main() {
 	authRepo := auth.NewRepository(db.DB)
 	authService := auth.NewService(authRepo)
 
+	gameRepo := game.NewRepository(db.DB)
+	galaxyRepo := galaxy.NewRepository(db.DB)
+	sectorRepo := sector.NewRepository(db.DB)
+	systemRepo := system.NewRepository(db.DB)
+	planetRepo := planet.NewRepository(db.DB)
+
+	gameService := game.NewService(gameRepo, galaxyRepo, sectorRepo, systemRepo, planetRepo)
+
 	corsMiddleware := initCORS()
 	rateLimiter := initRateLimit()
 
-	routes := server.NewRoutes(db, playerService, authService, oauthConfig)
+	routes := server.NewRoutes(db, playerService, authService, gameService, oauthConfig)
 	mux := routes.Setup()
 	handler := rateLimiter.Middleware(corsMiddleware.Handler(mux))
 
