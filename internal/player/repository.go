@@ -36,7 +36,7 @@ func (r *Repository) GetAllPlayers() ([]Player, error) {
 	logger.Debug("Retrieving all players")
 
 	query := `
-		SELECT id, username, email, display_name, avatar_url, created_at, updated_at
+		SELECT id, username, email, display_name, avatar_url, role, created_at, updated_at
 		FROM players
 		ORDER BY created_at DESC
 	`
@@ -55,12 +55,14 @@ func (r *Repository) GetAllPlayers() ([]Player, error) {
 	var players []Player
 	for rows.Next() {
 		var player Player
+		var roleStr string
 		err := rows.Scan(
 			&player.ID,
 			&player.Username,
 			&player.Email,
 			&player.DisplayName,
 			&player.AvatarURL,
+			&roleStr,
 			&player.CreatedAt,
 			&player.UpdatedAt,
 		)
@@ -68,6 +70,7 @@ func (r *Repository) GetAllPlayers() ([]Player, error) {
 			logger.Error("Failed to scan player row", "error", err)
 			return nil, fmt.Errorf("failed to scan player: %w", err)
 		}
+		player.Role = ParsePlayerRole(roleStr)
 		players = append(players, player)
 	}
 
@@ -89,19 +92,33 @@ func (r *Repository) CreatePlayer(username, email, displayName string, avatarURL
 	)
 	logger.Info("Creating new player")
 
+	isFirstPlayer, err := r.isFirstPlayer()
+	if err != nil {
+		logger.Error("Failed to check if first player", "error", err)
+		return nil, fmt.Errorf("failed to check if first player: %w", err)
+	}
+
+	role := PlayerRoleUser
+	if isFirstPlayer {
+		role = PlayerRoleAdmin
+		logger.Info("Creating first player as admin")
+	}
+
 	query := `
-		INSERT INTO players (username, email, display_name, avatar_url)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id, username, email, display_name, avatar_url, created_at, updated_at
+		INSERT INTO players (username, email, display_name, avatar_url, role)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id, username, email, display_name, avatar_url, role, created_at, updated_at
 	`
 
 	var player Player
-	err := r.db.QueryRow(query, username, email, displayName, avatarURL).Scan(
+	var roleStr string
+	err = r.db.QueryRow(query, username, email, displayName, avatarURL, role.String()).Scan(
 		&player.ID,
 		&player.Username,
 		&player.Email,
 		&player.DisplayName,
 		&player.AvatarURL,
+		&roleStr,
 		&player.CreatedAt,
 		&player.UpdatedAt,
 	)
@@ -111,8 +128,22 @@ func (r *Repository) CreatePlayer(username, email, displayName string, avatarURL
 		return nil, fmt.Errorf("failed to create player: %w", err)
 	}
 
-	logger.Info("Player created successfully", "player_id", player.ID, "username", player.Username)
+	player.Role = ParsePlayerRole(roleStr)
+
+	logger.Info("Player created successfully", 
+		"player_id", player.ID, 
+		"username", player.Username,
+		"role", player.Role)
 	return &player, nil
+}
+
+func (r *Repository) isFirstPlayer() (bool, error) {
+	var count int
+	err := r.db.QueryRow("SELECT COUNT(*) FROM players").Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count == 0, nil
 }
 
 func (r *Repository) FindPlayerByEmail(email string) (*Player, error) {
@@ -124,18 +155,20 @@ func (r *Repository) FindPlayerByEmail(email string) (*Player, error) {
 	logger.Debug("Finding player by email")
 
 	query := `
-		SELECT id, username, email, display_name, avatar_url, created_at, updated_at
+		SELECT id, username, email, display_name, avatar_url, role, created_at, updated_at
 		FROM players
 		WHERE email = $1
 	`
 
 	var player Player
+	var roleStr string
 	err := r.db.QueryRow(query, email).Scan(
 		&player.ID,
 		&player.Username,
 		&player.Email,
 		&player.DisplayName,
 		&player.AvatarURL,
+		&roleStr,
 		&player.CreatedAt,
 		&player.UpdatedAt,
 	)
@@ -149,7 +182,8 @@ func (r *Repository) FindPlayerByEmail(email string) (*Player, error) {
 		return nil, fmt.Errorf("database error: %w", err)
 	}
 
-	logger.Debug("Found player by email", "player_id", player.ID)
+	player.Role = ParsePlayerRole(roleStr)
+	logger.Debug("Found player by email", "player_id", player.ID, "role", player.Role)
 	return &player, nil
 }
 
@@ -162,18 +196,20 @@ func (r *Repository) GetPlayerByID(id int) (*Player, error) {
 	logger.Debug("Getting player by ID")
 
 	query := `
-		SELECT id, username, email, display_name, avatar_url, created_at, updated_at
+		SELECT id, username, email, display_name, avatar_url, role, created_at, updated_at
 		FROM players
 		WHERE id = $1
 	`
 
 	var player Player
+	var roleStr string
 	err := r.db.QueryRow(query, id).Scan(
 		&player.ID,
 		&player.Username,
 		&player.Email,
 		&player.DisplayName,
 		&player.AvatarURL,
+		&roleStr,
 		&player.CreatedAt,
 		&player.UpdatedAt,
 	)
@@ -187,6 +223,42 @@ func (r *Repository) GetPlayerByID(id int) (*Player, error) {
 		return nil, fmt.Errorf("database error: %w", err)
 	}
 
-	logger.Debug("Found player by ID", "username", player.Username)
+	player.Role = ParsePlayerRole(roleStr)
+	logger.Debug("Found player by ID", "username", player.Username, "role", player.Role)
 	return &player, nil
+}
+
+func (r *Repository) UpdatePlayerRole(playerID int, role PlayerRole) error {
+	logger := slog.With(
+		"component", "player_repository",
+		"operation", "update_role",
+		"player_id", playerID,
+		"role", role,
+	)
+	logger.Info("Updating player role")
+
+	if !role.IsValid() {
+		return fmt.Errorf("invalid role: %s", role)
+	}
+
+	query := `UPDATE players SET role = $1 WHERE id = $2`
+	result, err := r.db.Exec(query, role.String(), playerID)
+	if err != nil {
+		logger.Error("Failed to update player role", "error", err)
+		return fmt.Errorf("failed to update player role: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		logger.Error("Failed to get rows affected", "error", err)
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		logger.Warn("Player not found for role update")
+		return fmt.Errorf("player not found")
+	}
+
+	logger.Info("Player role updated successfully")
+	return nil
 }

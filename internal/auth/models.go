@@ -10,6 +10,7 @@ type Claims struct {
 	PlayerID int    `json:"player_id"`
 	Username string `json:"username"`
 	Email    string `json:"email"`
+	Role     string `json:"role"`
 	jwt.RegisteredClaims
 }
 

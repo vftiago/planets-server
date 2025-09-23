@@ -28,6 +28,7 @@ func (h *MeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"remote_addr", r.RemoteAddr,
 		"player_id", claims.PlayerID,
 		"username", claims.Username,
+		"role", claims.Role,
 	)
 	logger.Debug("User info requested")
 
@@ -37,6 +38,7 @@ func (h *MeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"player_id": claims.PlayerID,
 		"username":  claims.Username,
 		"email":     claims.Email,
+		"role":      claims.Role,
 	}
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {

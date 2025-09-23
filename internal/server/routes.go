@@ -60,18 +60,18 @@ func (r *Routes) Setup() *http.ServeMux {
 		r.oauthConfig.GitHubConfigured,
 	)
 
-	// Public API endpoints
+	// Public endpoints
 	mux.Handle("/api/health", healthHandler)
 	mux.Handle("/api/game/status", gameStatusHandler)
 	mux.Handle("/api/players", playersHandler)
-
-	// Game endpoints
 	mux.HandleFunc("/api/games", gameHandler.GetGames)
-	mux.HandleFunc("/api/games/create", gameHandler.CreateGame)
 	mux.HandleFunc("/api/games/stats", gameHandler.GetGameStats)
 
-	// Protected API endpoints
+	// Protected endpoints (authenticated users)
 	mux.Handle("/api/me", middleware.JWTMiddleware(meHandler))
+
+	// Admin-only endpoints (authenticated + admin role)
+	mux.Handle("/api/games/create", middleware.RequireAdmin(http.HandlerFunc(gameHandler.CreateGame)))
 
 	// OAuth endpoints
 	mux.HandleFunc("/auth/google", googleAuthHandler.HandleAuth)
@@ -81,8 +81,9 @@ func (r *Routes) Setup() *http.ServeMux {
 	mux.Handle("/auth/logout", logoutHandler)
 
 	logger.Info("Routes configured successfully",
-		"public_endpoints", []string{"/api/health", "/api/game/status", "/api/players", "/api/games", "/api/games/create", "/api/games/stats"},
+		"public_endpoints", []string{"/api/health", "/api/game/status", "/api/players", "/api/games", "/api/games/stats"},
 		"protected_endpoints", []string{"/api/me"},
+		"admin_endpoints", []string{"/api/games/create"},
 		"auth_endpoints", []string{"/auth/google", "/auth/github", "/auth/logout"},
 	)
 

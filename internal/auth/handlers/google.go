@@ -193,7 +193,7 @@ func (h *GoogleAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 
 	// Generate JWT
 	playerLogger.Debug("Generating JWT token for player")
-	jwtToken, err := auth.GenerateJWT(player.ID, player.Username, player.Email)
+	jwtToken, err := auth.GenerateJWT(player.ID, player.Username, player.Email, player.Role.String())
 	if err != nil {
 		playerLogger.Error("Failed to generate JWT token", "error", err)
 		redirectWithError(w, r, "auth_error", "Failed to create authentication token")
@@ -203,13 +203,10 @@ func (h *GoogleAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 	// Set HttpOnly cookie
 	cookies.SetAuthCookie(w, jwtToken)
 
-	// Check if this is a newly created player (rough approximation)
-	isNewPlayer := time.Since(player.CreatedAt) < time.Minute
-
 	playerLogger.Info("Google OAuth authentication successful",
 		"provider", "google",
-		"new_player", isNewPlayer,
-		"player_username", player.Username)
+		"player_username", player.Username,
+		"player_role", player.Role)
 
 	cfg := config.GlobalConfig
 	successURL := fmt.Sprintf("%s/auth/callback?success=true", cfg.Frontend.URL)

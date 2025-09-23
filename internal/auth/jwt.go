@@ -10,13 +10,14 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func GenerateJWT(playerID int, username, email string) (string, error) {
+func GenerateJWT(playerID int, username, email, role string) (string, error) {
 	cfg := config.GlobalConfig
 	logger := slog.With(
 		"component", "jwt",
 		"operation", "generate",
 		"player_id", playerID,
 		"username", username,
+		"role", role,
 	)
 	logger.Debug("Generating JWT token for player")
 
@@ -25,6 +26,7 @@ func GenerateJWT(playerID int, username, email string) (string, error) {
 		PlayerID: playerID,
 		Username: username,
 		Email:    email,
+		Role:     role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -66,6 +68,7 @@ func ValidateJWT(tokenString string) (*Claims, error) {
 		logger.Debug("JWT token validated successfully",
 			"player_id", claims.PlayerID,
 			"username", claims.Username,
+			"role", claims.Role,
 			"expires_at", claims.ExpiresAt.Time)
 		return claims, nil
 	}
