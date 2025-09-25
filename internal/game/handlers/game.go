@@ -44,7 +44,7 @@ func (h *GameHandler) CreateGame(w http.ResponseWriter, r *http.Request) {
 		config.TurnIntervalHours = 1
 	}
 	if config.UniverseConfig.GalaxyName == "" {
-		config.UniverseConfig.GalaxyName = "Milky Way"
+		config.UniverseConfig.GalaxyName = "Andromeda"
 	}
 	if config.UniverseConfig.SectorCount == 0 {
 		config.UniverseConfig.SectorCount = 16
@@ -116,6 +116,90 @@ func (h *GameHandler) GetGames(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Debug("Games list completed", "game_count", len(games))
+}
+
+func (h *GameHandler) GetCurrentGame(w http.ResponseWriter, r *http.Request) {
+	logger := slog.With("handler", "get_current_game", "remote_addr", r.RemoteAddr)
+	logger.Debug("Current game requested")
+
+	if r.Method != http.MethodGet {
+		logger.Warn("Invalid method for get current game", "method", r.Method)
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	currentGame, err := h.service.GetCurrentGame()
+	if err != nil {
+		logger.Error("Failed to get current game", "error", err)
+		http.Error(w, "Failed to get current game", http.StatusInternalServerError)
+		return
+	}
+
+	if currentGame == nil {
+		logger.Debug("No current game found")
+		http.Error(w, "No game found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if err := json.NewEncoder(w).Encode(currentGame); err != nil {
+		logger.Error("Failed to encode current game response", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	logger.Debug("Current game response completed", "game_id", currentGame.ID, "status", currentGame.Status)
+}
+
+func (h *GameHandler) GetCurrentGameStats(w http.ResponseWriter, r *http.Request) {
+	logger := slog.With("handler", "get_current_game_stats", "remote_addr", r.RemoteAddr)
+	logger.Debug("Current game stats requested")
+
+	if r.Method != http.MethodGet {
+		logger.Warn("Invalid method for get current game stats", "method", r.Method)
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	currentGame, err := h.service.GetCurrentGame()
+	if err != nil {
+		logger.Error("Failed to get current game", "error", err)
+		http.Error(w, "Failed to get current game", http.StatusInternalServerError)
+		return
+	}
+
+	if currentGame == nil {
+		logger.Debug("No current game found for stats")
+		http.Error(w, "No game found", http.StatusNotFound)
+		return
+	}
+
+	stats, err := h.service.GetGameStats(currentGame.ID)
+	if err != nil {
+		logger.Error("Failed to get game stats", "error", err, "game_id", currentGame.ID)
+		http.Error(w, "Failed to get game stats", http.StatusInternalServerError)
+		return
+	}
+
+	if stats == nil {
+		logger.Debug("Game stats not found", "game_id", currentGame.ID)
+		http.Error(w, "Game stats not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if err := json.NewEncoder(w).Encode(stats); err != nil {
+		logger.Error("Failed to encode game stats response", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	logger.Debug("Current game stats completed", 
+		"game_id", currentGame.ID,
+		"planets", stats.PlanetCount,
+		"systems", stats.SystemCount)
 }
 
 func (h *GameHandler) GetGameStats(w http.ResponseWriter, r *http.Request) {

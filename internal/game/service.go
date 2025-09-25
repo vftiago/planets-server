@@ -43,6 +43,11 @@ func (s *Service) CreateGame(config GameConfig) (*Game, error) {
 	logger := slog.With("component", "game_service", "operation", "create_game", "name", config.Name)
 	logger.Info("Creating new game with universe generation")
 
+	if err := s.deleteExistingGames(); err != nil {
+		logger.Error("Failed to delete existing games", "error", err)
+		return nil, fmt.Errorf("failed to delete existing games: %w", err)
+	}
+
 	game, err := s.gameRepo.CreateGame(config)
 	if err != nil {
 		logger.Error("Failed to create game", "error", err)
@@ -380,6 +385,26 @@ func (s *Service) GetGameByID(gameID int) (*Game, error) {
 	return s.gameRepo.GetGameByID(gameID)
 }
 
+func (s *Service) GetCurrentGame() (*Game, error) {
+	logger := slog.With("component", "game_service", "operation", "get_current_game")
+	logger.Debug("Getting current active game")
+
+	games, err := s.gameRepo.GetAllGames()
+	if err != nil {
+		logger.Error("Failed to get games", "error", err)
+		return nil, fmt.Errorf("failed to get games: %w", err)
+	}
+
+	if len(games) == 0 {
+		logger.Debug("No games found")
+		return nil, nil
+	}
+
+	currentGame := &games[0]
+	logger.Debug("Found current game", "game_id", currentGame.ID, "name", currentGame.Name, "status", currentGame.Status)
+	return currentGame, nil
+}
+
 func (s *Service) GetAllGames() ([]Game, error) {
 	return s.gameRepo.GetAllGames()
 }
@@ -393,4 +418,33 @@ func (s *Service) DeleteGame(gameID int) error {
 	logger.Info("Deleting game and all related data")
 
 	return s.gameRepo.DeleteGame(gameID)
+}
+
+func (s *Service) deleteExistingGames() error {
+	logger := slog.With("component", "game_service", "operation", "delete_existing_games")
+	logger.Info("Deleting all existing games to maintain single universe")
+
+	existingGames, err := s.gameRepo.GetAllGames()
+	if err != nil {
+		logger.Error("Failed to get existing games", "error", err)
+		return fmt.Errorf("failed to get existing games: %w", err)
+	}
+
+	if len(existingGames) == 0 {
+		logger.Debug("No existing games to delete")
+		return nil
+	}
+
+	logger.Info("Found existing games to delete", "count", len(existingGames))
+	
+	for _, game := range existingGames {
+		if err := s.gameRepo.DeleteGame(game.ID); err != nil {
+			logger.Error("Failed to delete existing game", "error", err, "game_id", game.ID)
+			return fmt.Errorf("failed to delete existing game %d: %w", game.ID, err)
+		}
+		logger.Debug("Deleted existing game", "game_id", game.ID, "name", game.Name)
+	}
+
+	logger.Info("Successfully deleted all existing games", "deleted_count", len(existingGames))
+	return nil
 }
