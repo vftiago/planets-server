@@ -18,6 +18,7 @@ type Config struct {
 	Logging   LoggingConfig
 	RateLimit RateLimitConfig
 	Universe	UniverseConfig
+	Admin     AdminConfig
 }
 
 type ServerConfig struct {
@@ -93,6 +94,13 @@ type UniverseConfig struct {
 	DefaultGalaxyName   string
 }
 
+type AdminConfig struct {
+	Email       string
+	Username    string
+	DisplayName string
+}
+
+
 var GlobalConfig *Config
 
 func Init() error {
@@ -123,6 +131,7 @@ func load() (*Config, error) {
 		Logging:   loadLoggingConfig(),
 		RateLimit: loadRateLimitConfig(),
 		Universe:  loadUniverseConfig(),
+		Admin:     loadAdminConfig(),
 	}
 
 	return config, nil
@@ -239,6 +248,12 @@ func loadUniverseConfig() UniverseConfig {
 		MinPlanetsPerSystem: minPlanets,
 		MaxPlanetsPerSystem: maxPlanets,
 		DefaultGalaxyName:   utils.GetEnv("UNIVERSE_DEFAULT_GALAXY_NAME", "Milky Way"),
+	}
+}
+
+func loadAdminConfig() AdminConfig {
+	return AdminConfig{
+		Email:       utils.GetEnv("ADMIN_EMAIL", "admin@localhost"),
 	}
 }
 

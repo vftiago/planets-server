@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"planets-server/internal/shared/config"
 )
 
 type Repository struct {
@@ -92,16 +93,9 @@ func (r *Repository) CreatePlayer(username, email, displayName string, avatarURL
 	)
 	logger.Info("Creating new player")
 
-	isFirstPlayer, err := r.isFirstPlayer()
-	if err != nil {
-		logger.Error("Failed to check if first player", "error", err)
-		return nil, fmt.Errorf("failed to check if first player: %w", err)
-	}
-
-	role := PlayerRoleUser
-	if isFirstPlayer {
-		role = PlayerRoleAdmin
-		logger.Info("Creating first player as admin")
+	role := r.determinePlayerRole(email)
+	if role == PlayerRoleAdmin {
+		logger.Info("Creating player with admin role", "email", email)
 	}
 
 	query := `
@@ -112,7 +106,7 @@ func (r *Repository) CreatePlayer(username, email, displayName string, avatarURL
 
 	var player Player
 	var roleStr string
-	err = r.db.QueryRow(query, username, email, displayName, avatarURL, role.String()).Scan(
+	err := r.db.QueryRow(query, username, email, displayName, avatarURL, role.String()).Scan(
 		&player.ID,
 		&player.Username,
 		&player.Email,
@@ -137,13 +131,12 @@ func (r *Repository) CreatePlayer(username, email, displayName string, avatarURL
 	return &player, nil
 }
 
-func (r *Repository) isFirstPlayer() (bool, error) {
-	var count int
-	err := r.db.QueryRow("SELECT COUNT(*) FROM players").Scan(&count)
-	if err != nil {
-		return false, err
+func (r *Repository) determinePlayerRole(email string) PlayerRole {
+	cfg := config.GlobalConfig
+	if cfg != nil && email == cfg.Admin.Email {
+		return PlayerRoleAdmin
 	}
-	return count == 0, nil
+	return PlayerRoleUser
 }
 
 func (r *Repository) FindPlayerByEmail(email string) (*Player, error) {

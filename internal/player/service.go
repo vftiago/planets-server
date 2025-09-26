@@ -3,6 +3,7 @@ package player
 import (
 	"fmt"
 	"log/slog"
+	"planets-server/internal/shared/config"
 	"strings"
 )
 
@@ -41,8 +42,9 @@ func (s *Service) FindOrCreatePlayerByOAuth(provider, providerUserID, email, dis
 	)
 	logger.Debug("Finding or creating player by OAuth")
 
-	// Check if a player with this email already exists (account linking)
-	logger.Debug("Checking for existing player by email for account linking")
+	cfg := config.GlobalConfig
+	isAdminEmail := cfg != nil && email == cfg.Admin.Email
+
 	player, err := s.repo.FindPlayerByEmail(email)
 	if err != nil {
 		logger.Error("Database error checking for player by email", "error", err)
@@ -50,14 +52,26 @@ func (s *Service) FindOrCreatePlayerByOAuth(provider, providerUserID, email, dis
 	}
 
 	if player != nil {
-		logger.Info("Found existing player by email", "player_id", player.ID)
+		logger.Info("Found existing player by email", "player_id", player.ID, "role", player.Role)
+		if isAdminEmail && player.Role != PlayerRoleAdmin {
+			logger.Info("Upgrading existing user to admin role", "player_id", player.ID)
+			if err := s.repo.UpdatePlayerRole(player.ID, PlayerRoleAdmin); err != nil {
+				logger.Error("Failed to upgrade user to admin", "error", err)
+				return nil, fmt.Errorf("failed to upgrade to admin: %w", err)
+			}
+			player.Role = PlayerRoleAdmin
+		}
 		return player, nil
 	}
 
-	// No existing player found, create new one
 	logger.Info("Creating new player with OAuth provider")
 	username := s.generateUsernameFromEmail(email)
-	logger.Debug("Generated username from email", "username", username, "email", email)
+	
+	if isAdminEmail && cfg != nil {
+		username = cfg.Admin.Username
+		displayName = cfg.Admin.DisplayName
+		logger.Info("Creating new admin user via OAuth")
+	}
 
 	player, err = s.repo.CreatePlayer(username, email, displayName, avatarURL)
 	if err != nil {
@@ -68,6 +82,7 @@ func (s *Service) FindOrCreatePlayerByOAuth(provider, providerUserID, email, dis
 	logger.Info("Successfully created new player with OAuth",
 		"player_id", player.ID,
 		"username", player.Username,
+		"role", player.Role,
 		"provider", provider)
 
 	return player, nil
