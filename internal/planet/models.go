@@ -24,7 +24,6 @@ type Planet struct {
 	Population    int64      `json:"population"`
 	MaxPopulation int64      `json:"max_population"`
 	OwnerID       *int       `json:"owner_id"`
-	IsHomeworld   bool       `json:"is_homeworld"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
 }

@@ -41,7 +41,7 @@ func (rl *RateLimiter) getLimiter(ip string) *rate.Limiter {
 
 	if !exists {
 		limiter = rate.NewLimiter(rate.Limit(rl.config.RequestsPerSecond), rl.config.BurstSize)
-		
+
 		rl.mu.Lock()
 		rl.clients[ip] = limiter
 		rl.mu.Unlock()
@@ -88,7 +88,7 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 				"requests_per_second", rl.config.RequestsPerSecond,
 				"burst_size", rl.config.BurstSize,
 			)
-			
+
 			w.Header().Set("Retry-After", "1")
 			http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
 			return

@@ -20,6 +20,7 @@ import (
 	"planets-server/internal/shared/database"
 	"planets-server/internal/shared/logger"
 	"planets-server/internal/system"
+	"planets-server/internal/universe"
 )
 
 func main() {
@@ -57,22 +58,32 @@ func main() {
 	}
 
 	playerRepo := player.NewRepository(db.DB)
-	playerService := player.NewService(playerRepo)
+	playerService := player.NewService(playerRepo, logger)
 	authRepo := auth.NewRepository(db.DB)
-	authService := auth.NewService(authRepo)
+	authService := auth.NewService(authRepo, logger)
 
-	gameRepo := game.NewRepository(db.DB)
-	galaxyRepo := galaxy.NewRepository(db.DB)
-	sectorRepo := sector.NewRepository(db.DB)
-	systemRepo := system.NewRepository(db.DB)
-	planetRepo := planet.NewRepository(db.DB)
+	// Initialize domain repositories
+	galaxyRepo := galaxy.NewRepository(db.DB, logger)
+	sectorRepo := sector.NewRepository(db.DB, logger)
+	systemRepo := system.NewRepository(db.DB, logger)
+	planetRepo := planet.NewRepository(db.DB, logger)
+	universeRepo := universe.NewRepository(db.DB, logger)
 
-	gameService := game.NewService(gameRepo, galaxyRepo, sectorRepo, systemRepo, planetRepo)
+	// Initialize domain services
+	galaxyService := galaxy.NewService(galaxyRepo, logger)
+	sectorService := sector.NewService(sectorRepo, logger)
+	systemService := system.NewService(systemRepo, logger)
+	planetService := planet.NewService(planetRepo, logger)
+	universeService := universe.NewService(universeRepo, galaxyService, sectorService, systemService, planetService, logger)
+
+	// Initialize game domain with new service
+	gameRepo := game.NewRepository(db.DB, logger)
+	gameService := game.NewService(gameRepo, universeRepo, logger)
 
 	corsMiddleware := initCORS()
 	rateLimiter := initRateLimit()
 
-	routes := server.NewRoutes(db, playerService, authService, gameService, oauthConfig)
+	routes := server.NewRoutes(db, playerService, authService, gameService, universeService, oauthConfig, logger)
 	mux := routes.Setup()
 	handler := rateLimiter.Middleware(corsMiddleware.Handler(mux))
 

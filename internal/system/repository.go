@@ -7,17 +7,21 @@ import (
 )
 
 type Repository struct {
-	db *sql.DB
+	db     *sql.DB
+	logger *slog.Logger
 }
 
-func NewRepository(db *sql.DB) *Repository {
-	logger := slog.With("component", "system_repository", "operation", "init")
+func NewRepository(db *sql.DB, logger *slog.Logger) *Repository {
 	logger.Debug("Initializing system repository")
-	return &Repository{db: db}
+
+	return &Repository{
+		db:     db,
+		logger: logger,
+	}
 }
 
 func (r *Repository) CreateSystem(sectorID, systemX, systemY int, name string) (*System, error) {
-	logger := slog.With(
+	logger := r.logger.With(
 		"component", "system_repository",
 		"operation", "create_system",
 		"sector_id", sectorID,
@@ -53,8 +57,7 @@ func (r *Repository) CreateSystem(sectorID, systemX, systemY int, name string) (
 }
 
 func (r *Repository) GetSystemsBySectorID(sectorID int) ([]System, error) {
-	logger := slog.With("component", "system_repository", "operation", "get_systems_by_sector", "sector_id", sectorID)
-	logger.Debug("Getting systems by sector ID")
+	r.logger.Debug("Getting systems by sector ID")
 
 	query := `
 		SELECT id, sector_id, system_x, system_y, name, planet_count, created_at, updated_at
@@ -65,12 +68,12 @@ func (r *Repository) GetSystemsBySectorID(sectorID int) ([]System, error) {
 
 	rows, err := r.db.Query(query, sectorID)
 	if err != nil {
-		logger.Error("Failed to query systems", "error", err)
+		r.logger.Error("Failed to query systems", "error", err)
 		return nil, fmt.Errorf("failed to query systems: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
-			logger.Error("Failed to close rows", "error", err)
+			r.logger.Error("Failed to close rows", "error", err)
 		}
 	}()
 
@@ -88,17 +91,17 @@ func (r *Repository) GetSystemsBySectorID(sectorID int) ([]System, error) {
 			&system.UpdatedAt,
 		)
 		if err != nil {
-			logger.Error("Failed to scan system row", "error", err)
+			r.logger.Error("Failed to scan system row", "error", err)
 			return nil, fmt.Errorf("failed to scan system: %w", err)
 		}
 		systems = append(systems, system)
 	}
 
 	if err := rows.Err(); err != nil {
-		logger.Error("Error during rows iteration", "error", err)
+		r.logger.Error("Error during rows iteration", "error", err)
 		return nil, fmt.Errorf("error iterating systems: %w", err)
 	}
 
-	logger.Debug("Systems retrieved", "count", len(systems))
+	r.logger.Debug("Systems retrieved", "count", len(systems))
 	return systems, nil
 }

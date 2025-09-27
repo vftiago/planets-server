@@ -7,13 +7,17 @@ import (
 )
 
 type Repository struct {
-	db *sql.DB
+	db     *sql.DB
+	logger *slog.Logger
 }
 
-func NewRepository(db *sql.DB) *Repository {
-	logger := slog.With("component", "sector_repository", "operation", "init")
+func NewRepository(db *sql.DB, logger *slog.Logger) *Repository {
 	logger.Debug("Initializing sector repository")
-	return &Repository{db: db}
+
+	return &Repository{
+		db:     db,
+		logger: logger,
+	}
 }
 
 func (r *Repository) CreateSector(galaxyID, sectorX, sectorY int, name string) (*Sector, error) {

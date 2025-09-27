@@ -7,17 +7,21 @@ import (
 )
 
 type Repository struct {
-	db *sql.DB
+	db     *sql.DB
+	logger *slog.Logger
 }
 
-func NewRepository(db *sql.DB) *Repository {
-	logger := slog.With("component", "planet_repository", "operation", "init")
+func NewRepository(db *sql.DB, logger *slog.Logger) *Repository {
 	logger.Debug("Initializing planet repository")
-	return &Repository{db: db}
+
+	return &Repository{
+		db:     db,
+		logger: logger,
+	}
 }
 
 func (r *Repository) CreatePlanet(systemID, planetIndex int, name string, planetType PlanetType, size int, maxPopulation int64) (*Planet, error) {
-	logger := slog.With(
+	logger := r.logger.With(
 		"component", "planet_repository",
 		"operation", "create_planet",
 		"system_id", systemID,
@@ -43,7 +47,6 @@ func (r *Repository) CreatePlanet(systemID, planetIndex int, name string, planet
 		&planet.Population,
 		&planet.MaxPopulation,
 		&planet.OwnerID,
-		&planet.IsHomeworld,
 		&planet.CreatedAt,
 		&planet.UpdatedAt,
 	)
@@ -55,62 +58,6 @@ func (r *Repository) CreatePlanet(systemID, planetIndex int, name string, planet
 
 	logger.Debug("Planet created successfully", "planet_id", planet.ID)
 	return &planet, nil
-}
-
-func (r *Repository) CreatePlanetsBatch(planets []Planet) error {
-	logger := slog.With("component", "planet_repository", "operation", "create_planets_batch")
-	logger.Debug("Creating planets in batch", "count", len(planets))
-
-	if len(planets) == 0 {
-		return nil
-	}
-
-	tx, err := r.db.Begin()
-	if err != nil {
-		logger.Error("Failed to begin transaction", "error", err)
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() {
-		if err := tx.Rollback(); err != nil && err.Error() != "sql: transaction has already been committed or rolled back" {
-			logger.Error("Failed to rollback transaction", "error", err)
-		}
-	}()
-
-	stmt, err := tx.Prepare(`
-		INSERT INTO planets (system_id, planet_index, name, type, size, population, max_population, owner_id, is_homeworld)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	`)
-	if err != nil {
-		logger.Error("Failed to prepare statement", "error", err)
-		return fmt.Errorf("failed to prepare statement: %w", err)
-	}
-	defer stmt.Close()
-
-	for _, planet := range planets {
-		_, err := stmt.Exec(
-			planet.SystemID,
-			planet.PlanetIndex,
-			planet.Name,
-			planet.Type,
-			planet.Size,
-			planet.Population,
-			planet.MaxPopulation,
-			planet.OwnerID,
-			planet.IsHomeworld,
-		)
-		if err != nil {
-			logger.Error("Failed to insert planet", "error", err, "planet_name", planet.Name)
-			return fmt.Errorf("failed to insert planet %s: %w", planet.Name, err)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		logger.Error("Failed to commit transaction", "error", err)
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	logger.Info("Planets created successfully", "count", len(planets))
-	return nil
 }
 
 func (r *Repository) GetPlanetsBySystemID(systemID int) ([]Planet, error) {
@@ -148,7 +95,6 @@ func (r *Repository) GetPlanetsBySystemID(systemID int) ([]Planet, error) {
 			&planet.Population,
 			&planet.MaxPopulation,
 			&planet.OwnerID,
-			&planet.IsHomeworld,
 			&planet.CreatedAt,
 			&planet.UpdatedAt,
 		)

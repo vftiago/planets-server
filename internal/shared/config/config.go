@@ -17,13 +17,13 @@ type Config struct {
 	Frontend  FrontendConfig
 	Logging   LoggingConfig
 	RateLimit RateLimitConfig
-	Universe	UniverseConfig
+	Universe  UniverseConfig
 	Admin     AdminConfig
 }
 
 type ServerConfig struct {
 	Port         string
-	URL    string
+	URL          string
 	Environment  string
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
@@ -99,7 +99,6 @@ type AdminConfig struct {
 	Username    string
 	DisplayName string
 }
-
 
 var GlobalConfig *Config
 
@@ -253,7 +252,7 @@ func loadUniverseConfig() UniverseConfig {
 
 func loadAdminConfig() AdminConfig {
 	return AdminConfig{
-		Email:       utils.GetEnv("ADMIN_EMAIL", "admin@localhost"),
+		Email: utils.GetEnv("ADMIN_EMAIL", "admin@localhost"),
 	}
 }
 

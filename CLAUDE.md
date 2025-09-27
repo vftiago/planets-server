@@ -59,27 +59,37 @@ internal/
   │   ├── repository.go         # Auth-specific database operations
   │   ├── service.go            # Auth business logic
   │   ├── jwt.go
-  │   ├── models.go
   │   ├── oauth.go
-  │   ├── repository.go
-  │   ├── service.go
   │   └── state.go
   ├── game/                     # Game domain
-  │   ├── engine/               # Game engine components (future)
-  │   │   ├── combat.go
-  │   │   ├── movement.go
-  │   │   ├── production.go
-  │   │   └── turn_processor.go
-  │   ├── events/               # Game events system (future)
-  │   │   ├── publisher.go
-  │   │   └── handlers.go
   │   ├── handlers/
-  │   │   └── status.go
-  │   ├── models.go             # Game, Turn, Fleet structs (future)
-  │   ├── repository.go         # Game database operations (future)
-  │   └── service.go            # Game business logic (turn processing, etc.) (future)
+  │   ├── models.go             # Game, GameConfig, GameStats structs
+  │   ├── repository.go         # Game database operations
+  │   └── service.go            # Game business logic
+  ├── universe/                 # Universe generation and management
+  │   ├── handlers/
+  │   ├── models.go             # Universe, UniverseConfig, GenerationProgress structs
+  │   ├── repository.go         # Universe database operations
+  │   └── service.go            # Universe generation orchestration
+  ├── galaxy/                   # Galaxy domain
+  │   ├── models.go             # Galaxy struct
+  │   ├── repository.go         # Galaxy database operations
+  │   └── service.go            # Galaxy business logic
+  ├── sector/                   # Sector domain
+  │   ├── models.go             # Sector struct
+  │   ├── repository.go         # Sector database operations
+  │   └── service.go            # Sector business logic
+  ├── system/                   # System domain
+  │   ├── models.go             # System struct
+  │   ├── repository.go         # System database operations
+  │   └── service.go            # System business logic
+  ├── planet/                   # Planet domain
+  │   ├── models.go             # Planet struct with types and enums
+  │   ├── repository.go         # Planet database operations
+  │   └── service.go            # Planet business logic
   ├── middleware/               # HTTP middleware
   │   ├── auth.go
+  │   ├── admin.go
   │   ├── cors.go
   │   └── rate_limit.go
   ├── player/                   # Player domain
@@ -94,30 +104,28 @@ internal/
   │   ├── handlers/
   │   │   └── health.go
   │   └── routes.go             # Route definitions
-  ├── shared/                   # Common utilities and infrastructure
-  │   └── config/               # Configuration management
-  │   │   └── config.go
-  │   ├── cookies/
-  │   │   └── cookies.go        # Cookie helpers
-  │   ├── database/             # Database connection, migrations
-  │   │   ├── connection.go
-  │   │   ├── migrations.go
-  │   │   └── transaction.go    # Transaction helpers (future)
-  |   ├── logger/               # Logging setup
-  │   │   └── logger.go
-  │   ├── utils/                # Generic utilities
-  │   │   ├── env.go
-  │   │   ├── validation.go     # Validation helpers (future)
-  │   │   └── crypto.go         # Crypto helpers (e.g. secure random strings) (future)
-  │   ├── errors/               # Common error types and handling (future)
-  │   │   ├── types.go
-  │   │   └── handler.go
-  └── api/                      # API layer (future - for API versioning - might not be necessary at all)
-      └── v1/
-          ├── auth.go
-          ├── player.go
-          └── game.go
+  └── shared/                   # Common utilities and infrastructure
+      ├── config/               # Configuration management
+      │   └── config.go
+      ├── cookies/
+      │   └── cookies.go        # Cookie helpers
+      ├── database/             # Database connection, migrations
+      │   ├── connection.go
+      │   └── migrations.go
+      ├── logger/               # Logging setup
+      │   └── logger.go
+      └── utils/                # Generic utilities
+          └── env.go
 ```
+
+### Service Layer Pattern
+
+All domain services follow a consistent pattern with logger injection and repository delegation:
+
+- **Constructor**: `NewService(repo *Repository, logger *slog.Logger)` with component-specific logging
+- **Repository Delegation**: Direct pass-through methods like `GetByID`, `Create`, etc.
+- **Business Logic**: Complex operations with structured logging using service logger
+- **Error Handling**: Contextual error logging and wrapping
 
 ### Authentication System
 
@@ -125,14 +133,16 @@ internal/
 - **OAuth Providers**: Google and GitHub OAuth with automatic account linking
 - **State Validation**: OAuth state parameter validation for CSRF protection
 - **Account Linking**: Users can link multiple OAuth providers to same account
-- **Middleware**: `JWTMiddleware` protects authenticated endpoints
+- **Admin System**: Role-based authorization with admin middleware
+- **Middleware**: `JWTMiddleware` and `RequireAdmin` protect endpoints
 
 ### Database Layer
 
 - **PostgreSQL**: Primary database with connection pooling
 - **Migration System**: File-based migrations in `migrations/` directory with automatic execution
-- **Repository Pattern**: `PlayerRepository` for data access abstraction
+- **Repository Pattern**: Domain-specific repositories for data access abstraction
 - **Transaction Support**: Database operations wrapped in transactions where needed
+- **Structured Logging**: All repositories have logger injection for consistent logging
 
 ### Configuration Management
 
@@ -140,43 +150,56 @@ internal/
 - **Global Config**: Centralized configuration through `internal/shared/config`
 - **Validation**: Configuration validation on startup with required field checks
 - **Environment Detection**: Automatic production/development mode detection
+- **Admin Configuration**: Admin user setup via environment variables
+
+### Game Universe Architecture
+
+The game uses a hierarchical spatial structure:
+
+- **Universe**: Root container, defines overall game space parameters
+- **Galaxy**: Contains sectors arranged in a grid pattern
+- **Sector**: Contains systems arranged in a grid pattern
+- **System**: Contains planets with random generation
+- **Planet**: Individual game objects with types, sizes, and populations
+
+Universe generation is orchestrated by the universe service, which coordinates galaxy, sector, system, and planet services to create the complete game world.
 
 ### HTTP Layer
 
 - **Standard Library**: Uses `net/http` with `http.ServeMux`
 - **CORS Support**: Configurable CORS middleware for frontend integration
+- **Rate Limiting**: Token bucket rate limiting with configurable limits
 - **Structured Logging**: `slog`-based logging with contextual information
 - **Route Organization**: Routes defined in `internal/server/routes.go`
+- **Middleware Stack**: CORS → Rate Limiting → Authentication → Admin → Handler
 
 ### Key Components
 
-**Models (`internal/models/`)**:
+**Models**: Domain-specific structs with JSON tags for API serialization
 
-- `Player`: Core user entity with OAuth provider linking
-- `PlayerRepository`: Database operations with automatic OAuth account linking
+**Handlers**: HTTP endpoint handlers with request/response handling
 
-**Handlers (`internal/handlers/`)**:
-
-- Health check, game status, player management endpoints
-- OAuth handlers separated by provider in `internal/auth/handlers/`
-
-**Middleware (`internal/middleware/`)**:
+**Middleware**:
 
 - JWT authentication middleware with context injection
+- Admin role authorization middleware
 - CORS middleware with environment-based configuration
+- Rate limiting middleware with token bucket algorithm
 
-**Auth System (`internal/auth/`)**:
+**Auth System**:
 
 - OAuth provider abstraction with Google and GitHub implementations
 - JWT creation/validation with configurable claims
 - Provider-specific user data mapping
+- Admin role assignment via configuration
 
 ## Database Schema
 
-The system uses two main tables:
+The system uses multiple tables organized by domain:
 
-- `players`: Core user accounts (id, username, email, display_name, avatar_url)
-- `player_auth_providers`: OAuth provider linkages (supports multiple providers per user)
+- **Players**: `players`, `player_auth_providers` - User accounts with OAuth linking
+- **Games**: `games` - Game instances with turn management
+- **Universe**: `universes`, `galaxies`, `sectors`, `systems`, `planets` - Hierarchical spatial data
 
 ## Environment Configuration
 
@@ -188,6 +211,8 @@ Key environment variables (see `internal/shared/config/config.go` for complete l
 - `GITHUB_CLIENT_ID/SECRET`: GitHub OAuth credentials
 - `FRONTEND_URL`: Frontend URL for CORS
 - `SERVER_URL`: Server URL for OAuth redirects
+- `ADMIN_EMAIL`: Admin user email for role assignment
+- `UNIVERSE_*`: Universe generation parameters
 
 ## Development Notes
 
@@ -196,4 +221,6 @@ Key environment variables (see `internal/shared/config/config.go` for complete l
 - Configuration validation prevents startup with missing required settings
 - Graceful shutdown handling with configurable timeouts
 - Structured logging with component-based context throughout
-- Clean separation between public and protected API endpoints
+- Clean separation between public, authenticated, and admin API endpoints
+- Universe generation uses configurable parameters for procedural content creation
+- All services follow the same constructor and logging patterns for consistency

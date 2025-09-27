@@ -8,13 +8,17 @@ import (
 )
 
 type Service struct {
-	repo *Repository
+	repo   *Repository
+	logger *slog.Logger
 }
 
-func NewService(repo *Repository) *Service {
-	logger := slog.With("component", "player_service", "operation", "init")
+func NewService(repo *Repository, logger *slog.Logger) *Service {
 	logger.Debug("Initializing player service")
-	return &Service{repo: repo}
+
+	return &Service{
+		repo:   repo,
+		logger: logger,
+	}
 }
 
 func (s *Service) GetPlayerCount() (int, error) {
@@ -34,7 +38,7 @@ func (s *Service) CreatePlayer(username, email, displayName string, avatarURL *s
 }
 
 func (s *Service) FindOrCreatePlayerByOAuth(provider, providerUserID, email, displayName string, avatarURL *string) (*Player, error) {
-	logger := slog.With(
+	logger := s.logger.With(
 		"component", "player_service",
 		"operation", "find_or_create_oauth",
 		"provider", provider,
@@ -66,7 +70,7 @@ func (s *Service) FindOrCreatePlayerByOAuth(provider, providerUserID, email, dis
 
 	logger.Info("Creating new player with OAuth provider")
 	username := s.generateUsernameFromEmail(email)
-	
+
 	if isAdminEmail && cfg != nil {
 		username = cfg.Admin.Username
 		displayName = cfg.Admin.DisplayName

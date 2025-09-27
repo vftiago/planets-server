@@ -8,33 +8,39 @@ import (
 )
 
 type Repository struct {
-	db *sql.DB
+	db     *sql.DB
+	logger *slog.Logger
 }
 
-func NewRepository(db *sql.DB) *Repository {
-	logger := slog.With("component", "game_repository", "operation", "init")
+func NewRepository(db *sql.DB, logger *slog.Logger) *Repository {
 	logger.Debug("Initializing game repository")
-	return &Repository{db: db}
+
+	return &Repository{
+		db:     db,
+		logger: logger,
+	}
 }
 
 func (r *Repository) CreateGame(config GameConfig) (*Game, error) {
-	logger := slog.With(
+	logger := r.logger.With(
 		"component", "game_repository",
 		"operation", "create_game",
 		"name", config.Name,
 		"max_players", config.MaxPlayers,
+		"universe_id", config.UniverseID,
 	)
 	logger.Info("Creating new game")
 
 	query := `
-		INSERT INTO games (name, description, status, current_turn, max_players, turn_interval_hours)
-		VALUES ($1, $2, 'creating', 0, $3, $4)
-		RETURNING id, name, description, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
+		INSERT INTO games (name, description, universe_id, status, current_turn, max_players, turn_interval_hours)
+		VALUES ($1, $2, $3, 'creating', 0, $4, $5)
+		RETURNING id, universe_id, name, description, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
 	`
 
 	var game Game
-	err := r.db.QueryRow(query, config.Name, config.Description, config.MaxPlayers, config.TurnIntervalHours).Scan(
+	err := r.db.QueryRow(query, config.Name, config.Description, config.UniverseID, config.MaxPlayers, config.TurnIntervalHours).Scan(
 		&game.ID,
+		&game.UniverseID,
 		&game.Name,
 		&game.Description,
 		&game.Status,
@@ -60,7 +66,7 @@ func (r *Repository) GetGameByID(gameID int) (*Game, error) {
 	logger.Debug("Getting game by ID")
 
 	query := `
-		SELECT id, name, description, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
+		SELECT id, universe_id, name, description, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
 		FROM games
 		WHERE id = $1
 	`
@@ -68,6 +74,7 @@ func (r *Repository) GetGameByID(gameID int) (*Game, error) {
 	var game Game
 	err := r.db.QueryRow(query, gameID).Scan(
 		&game.ID,
+		&game.UniverseID,
 		&game.Name,
 		&game.Description,
 		&game.Status,
@@ -97,7 +104,7 @@ func (r *Repository) GetAllGames() ([]Game, error) {
 	logger.Debug("Getting all games")
 
 	query := `
-		SELECT id, name, description, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
+		SELECT id, universe_id, name, description, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
 		FROM games
 		ORDER BY created_at DESC
 	`
@@ -118,6 +125,7 @@ func (r *Repository) GetAllGames() ([]Game, error) {
 		var game Game
 		err := rows.Scan(
 			&game.ID,
+			&game.UniverseID,
 			&game.Name,
 			&game.Description,
 			&game.Status,
@@ -210,52 +218,26 @@ func (r *Repository) GetGameStats(gameID int) (*GameStats, error) {
 	query := `
 		SELECT 
 			g.id,
+			g.universe_id,
 			g.name,
 			g.status,
 			g.current_turn,
 			COALESCE(player_count.count, 0) as player_count,
 			g.max_players,
-			COALESCE(galaxy_stats.sector_count, 0) as sector_count,
-			COALESCE(galaxy_stats.system_count, 0) as system_count,
-			COALESCE(galaxy_stats.planet_count, 0) as planet_count,
-			COALESCE(galaxy_stats.inhabited_planets, 0) as inhabited_planets,
 			g.next_turn_at
 		FROM games g
-		LEFT JOIN (
-			SELECT COUNT(*) as count 
-			FROM planets p 
-			JOIN systems s ON p.system_id = s.id 
-			JOIN sectors sec ON s.sector_id = sec.id 
-			JOIN galaxies gal ON sec.galaxy_id = gal.id 
-			WHERE gal.game_id = $1 AND p.owner_id IS NOT NULL
-		) player_count ON true
-		LEFT JOIN (
-			SELECT 
-				COUNT(DISTINCT sec.id) as sector_count,
-				COUNT(DISTINCT s.id) as system_count,
-				COUNT(DISTINCT p.id) as planet_count,
-				COUNT(DISTINCT CASE WHEN p.owner_id IS NOT NULL THEN p.id END) as inhabited_planets
-			FROM galaxies gal
-			LEFT JOIN sectors sec ON gal.id = sec.galaxy_id
-			LEFT JOIN systems s ON sec.id = s.sector_id
-			LEFT JOIN planets p ON s.id = p.system_id
-			WHERE gal.game_id = $1
-		) galaxy_stats ON true
 		WHERE g.id = $1
 	`
 
 	var stats GameStats
 	err := r.db.QueryRow(query, gameID).Scan(
 		&stats.ID,
+		&stats.UniverseID,
 		&stats.Name,
 		&stats.Status,
 		&stats.CurrentTurn,
 		&stats.PlayerCount,
 		&stats.MaxPlayers,
-		&stats.SectorCount,
-		&stats.SystemCount,
-		&stats.PlanetCount,
-		&stats.InhabitedPlanets,
 		&stats.NextTurnAt,
 	)
 
@@ -268,11 +250,7 @@ func (r *Repository) GetGameStats(gameID int) (*GameStats, error) {
 		return nil, fmt.Errorf("failed to get game stats: %w", err)
 	}
 
-	logger.Debug("Game stats retrieved",
-		"sectors", stats.SectorCount,
-		"systems", stats.SystemCount,
-		"planets", stats.PlanetCount,
-		"players", stats.PlayerCount)
+	logger.Debug("Game stats retrieved", "players", stats.PlayerCount)
 
 	return &stats, nil
 }

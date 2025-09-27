@@ -6,9 +6,10 @@ import (
 
 type Galaxy struct {
 	ID          int       `json:"id"`
-	GameID      int       `json:"game_id"`
+	UniverseID  int       `json:"universe_id"`
 	Name        string    `json:"name"`
-	Description string    `json:"description"`
+	GalaxyX     int       `json:"galaxy_x"`
+	GalaxyY     int       `json:"galaxy_y"`
 	SectorCount int       `json:"sector_count"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`

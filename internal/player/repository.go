@@ -124,8 +124,8 @@ func (r *Repository) CreatePlayer(username, email, displayName string, avatarURL
 
 	player.Role = ParsePlayerRole(roleStr)
 
-	logger.Info("Player created successfully", 
-		"player_id", player.ID, 
+	logger.Info("Player created successfully",
+		"player_id", player.ID,
 		"username", player.Username,
 		"role", player.Role)
 	return &player, nil

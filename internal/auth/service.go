@@ -8,10 +8,12 @@ type Service struct {
 	repo *Repository
 }
 
-func NewService(repo *Repository) *Service {
-	logger := slog.With("component", "auth_service", "operation", "init")
+func NewService(repo *Repository, logger *slog.Logger) *Service {
 	logger.Debug("Initializing auth service")
-	return &Service{repo: repo}
+
+	return &Service{
+		repo: repo,
+	}
 }
 
 func (s *Service) CreateAuthProvider(playerID int, provider, providerUserID, providerEmail string) error {
