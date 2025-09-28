@@ -6,7 +6,7 @@ import (
 
 type Galaxy struct {
 	ID          int       `json:"id"`
-	UniverseID  int       `json:"universe_id"`
+	GameID      int       `json:"game_id"`
 	Name        string    `json:"name"`
 	GalaxyX     int       `json:"galaxy_x"`
 	GalaxyY     int       `json:"galaxy_y"`

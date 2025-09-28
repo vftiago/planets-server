@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS players (
     email VARCHAR(255) UNIQUE NOT NULL,
     display_name VARCHAR(100) NOT NULL,
     avatar_url TEXT,
+    role VARCHAR(20) NOT NULL DEFAULT 'user',
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -20,5 +21,8 @@ CREATE TABLE IF NOT EXISTS player_auth_providers (
 );
 
 CREATE INDEX IF NOT EXISTS idx_players_email ON players(email);
+CREATE INDEX IF NOT EXISTS idx_players_role ON players(role);
 CREATE INDEX IF NOT EXISTS idx_auth_providers_player_id ON player_auth_providers(player_id);
 CREATE INDEX IF NOT EXISTS idx_auth_providers_provider ON player_auth_providers(provider, provider_user_id);
+
+ALTER TABLE players ADD CONSTRAINT check_player_role CHECK (role IN ('user', 'admin'));

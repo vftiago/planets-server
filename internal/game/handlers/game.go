@@ -27,39 +27,57 @@ func (h *GameHandler) CreateGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var config game.GameConfig
-	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
-		logger.Error("Failed to decode game config", "error", err)
+	var request struct {
+		Game     game.GameConfig     `json:"game"`
+		Universe game.UniverseConfig `json:"universe"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		logger.Error("Failed to decode request", "error", err)
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
 
-	// Validate required fields
-	if config.Name == "" {
+	// Validate required game fields
+	if request.Game.Name == "" {
 		logger.Error("Game name is required")
 		http.Error(w, "Game name is required", http.StatusBadRequest)
 		return
 	}
-	if config.UniverseID == 0 {
-		logger.Error("Universe ID is required")
-		http.Error(w, "Universe ID is required", http.StatusBadRequest)
-		return
+
+	// Set defaults for optional game fields
+	if request.Game.MaxPlayers == 0 {
+		request.Game.MaxPlayers = 10
+	}
+	if request.Game.TurnIntervalHours == 0 {
+		request.Game.TurnIntervalHours = 1
 	}
 
-	// Set defaults for optional fields
-	if config.MaxPlayers == 0 {
-		config.MaxPlayers = 10
+	// Set defaults for universe configuration
+	if request.Universe.GalaxyCount == 0 {
+		request.Universe.GalaxyCount = 1
 	}
-	if config.TurnIntervalHours == 0 {
-		config.TurnIntervalHours = 1
+	if request.Universe.SectorsPerGalaxy == 0 {
+		request.Universe.SectorsPerGalaxy = 10
+	}
+	if request.Universe.SystemsPerSector == 0 {
+		request.Universe.SystemsPerSector = 10
+	}
+	if request.Universe.MinPlanetsPerSystem == 0 {
+		request.Universe.MinPlanetsPerSystem = 1
+	}
+	if request.Universe.MaxPlanetsPerSystem == 0 {
+		request.Universe.MaxPlanetsPerSystem = 8
 	}
 
-	logger.Info("Creating game",
-		"name", config.Name,
-		"max_players", config.MaxPlayers,
-		"universe_id", config.UniverseID)
+	logger.Info("Creating game with universe",
+		"name", request.Game.Name,
+		"max_players", request.Game.MaxPlayers,
+		"galaxies", request.Universe.GalaxyCount,
+		"sectors_per_galaxy", request.Universe.SectorsPerGalaxy,
+		"systems_per_sector", request.Universe.SystemsPerSector)
 
-	createdGame, err := h.service.CreateGame(config)
+	createdGame, err := h.service.CreateGame(request.Game, request.Universe)
 	if err != nil {
 		logger.Error("Failed to create game", "error", err)
 		http.Error(w, "Failed to create game", http.StatusInternalServerError)
@@ -78,7 +96,11 @@ func (h *GameHandler) CreateGame(w http.ResponseWriter, r *http.Request) {
 	logger.Info("Game created successfully",
 		"game_id", createdGame.ID,
 		"name", createdGame.Name,
-		"status", createdGame.Status)
+		"status", createdGame.Status,
+		"galaxies", createdGame.GalaxyCount,
+		"sectors", createdGame.SectorCount,
+		"systems", createdGame.SystemCount,
+		"planets", createdGame.PlanetCount)
 }
 
 func (h *GameHandler) GetGames(w http.ResponseWriter, r *http.Request) {

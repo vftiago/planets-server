@@ -20,17 +20,17 @@ func NewRepository(db *sql.DB, logger *slog.Logger) *Repository {
 	}
 }
 
-func (r *Repository) CreateGalaxy(universeID, galaxyX, galaxyY int, name string) error {
+func (r *Repository) CreateGalaxy(gameID, galaxyX, galaxyY int, name string) error {
 	logger := r.logger.With(
 		"component", "galaxy_repository",
-		"operation", "create_universe_galaxy",
-		"universe_id", universeID,
+		"operation", "create_game_galaxy",
+		"game_id", gameID,
 		"name", name,
 	)
-	logger.Info("Creating universe galaxy")
+	logger.Info("Creating game galaxy")
 
 	query := `
-		INSERT INTO galaxies (universe_id, galaxy_x, galaxy_y, name, sector_count)
+		INSERT INTO galaxies (game_id, galaxy_x, galaxy_y, name, sector_count)
 		VALUES ($1, $2, $3, $4, 0)
 		RETURNING id, created_at, updated_at
 	`
@@ -38,7 +38,7 @@ func (r *Repository) CreateGalaxy(universeID, galaxyX, galaxyY int, name string)
 	var galaxy Galaxy
 	err := r.db.QueryRow(
 		query,
-		universeID,
+		gameID,
 		galaxyX,
 		galaxyY,
 		name,
@@ -47,18 +47,18 @@ func (r *Repository) CreateGalaxy(universeID, galaxyX, galaxyY int, name string)
 	return err
 }
 
-func (r *Repository) GetGalaxiesByUniverseID(universeID int) ([]Galaxy, error) {
-	logger := r.logger.With("component", "galaxy_repository", "operation", "get_galaxies_by_universe", "universe_id", universeID)
-	logger.Debug("Getting galaxies by universe ID")
+func (r *Repository) GetGalaxiesByGameID(gameID int) ([]Galaxy, error) {
+	logger := r.logger.With("component", "galaxy_repository", "operation", "get_galaxies_by_game", "game_id", gameID)
+	logger.Debug("Getting galaxies by game ID")
 
 	query := `
-		SELECT id, universe_id, name, galaxy_x, galaxy_y, sector_count, created_at, updated_at
+		SELECT id, game_id, name, galaxy_x, galaxy_y, sector_count, created_at, updated_at
 		FROM galaxies
-		WHERE universe_id = $1
+		WHERE game_id = $1
 		ORDER BY galaxy_x, galaxy_y
 	`
 
-	rows, err := r.db.Query(query, universeID)
+	rows, err := r.db.Query(query, gameID)
 	if err != nil {
 		logger.Error("Failed to query galaxies", "error", err)
 		return nil, fmt.Errorf("failed to query galaxies: %w", err)
@@ -74,7 +74,7 @@ func (r *Repository) GetGalaxiesByUniverseID(universeID int) ([]Galaxy, error) {
 		var galaxy Galaxy
 		err := rows.Scan(
 			&galaxy.ID,
-			&galaxy.UniverseID,
+			&galaxy.GameID,
 			&galaxy.Name,
 			&galaxy.GalaxyX,
 			&galaxy.GalaxyY,
@@ -103,7 +103,7 @@ func (r *Repository) GetGalaxyByID(galaxyID int) (*Galaxy, error) {
 	logger.Debug("Getting galaxy by ID")
 
 	query := `
-		SELECT id, universe_id, name, galaxy_x, galaxy_y, sector_count, created_at, updated_at
+		SELECT id, game_id, name, galaxy_x, galaxy_y, sector_count, created_at, updated_at
 		FROM galaxies
 		WHERE id = $1
 	`
@@ -111,7 +111,7 @@ func (r *Repository) GetGalaxyByID(galaxyID int) (*Galaxy, error) {
 	var galaxy Galaxy
 	err := r.db.QueryRow(query, galaxyID).Scan(
 		&galaxy.ID,
-		&galaxy.UniverseID,
+		&galaxy.GameID,
 		&galaxy.Name,
 		&galaxy.GalaxyX,
 		&galaxy.GalaxyY,

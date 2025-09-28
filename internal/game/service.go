@@ -3,44 +3,44 @@ package game
 import (
 	"fmt"
 	"log/slog"
-	"time"
 
-	"planets-server/internal/universe"
+	"planets-server/internal/galaxy"
+	"planets-server/internal/planet"
+	"planets-server/internal/sector"
+	"planets-server/internal/system"
 )
 
 type Service struct {
-	gameRepo     *Repository
-	universeRepo *universe.Repository
-	logger       *slog.Logger
+	gameRepo      *Repository
+	galaxyService *galaxy.Service
+	sectorService *sector.Service
+	systemService *system.Service
+	planetService *planet.Service
+	logger        *slog.Logger
 }
 
 func NewService(
 	gameRepo *Repository,
-	universeRepo *universe.Repository,
+	galaxyService *galaxy.Service,
+	sectorService *sector.Service,
+	systemService *system.Service,
+	planetService *planet.Service,
 	logger *slog.Logger,
 ) *Service {
 	return &Service{
-		gameRepo:     gameRepo,
-		universeRepo: universeRepo,
-		logger:       logger,
+		gameRepo:      gameRepo,
+		galaxyService: galaxyService,
+		sectorService: sectorService,
+		systemService: systemService,
+		planetService: planetService,
+		logger:        logger,
 	}
 }
 
-// CreateGame creates a new game that references an existing universe
-func (s *Service) CreateGame(config GameConfig) (*Game, error) {
-	logger := s.logger.With("component", "game_service", "operation", "create_game",
-		"name", config.Name, "universe_id", config.UniverseID)
+// CreateGame creates a new game with an integrated universe
+func (s *Service) CreateGame(config GameConfig, universeConfig UniverseConfig) (*Game, error) {
+	logger := s.logger.With("component", "game_service", "operation", "create_game", "name", config.Name)
 	logger.Info("Creating new game")
-
-	// Verify the universe exists
-	universe, err := s.universeRepo.GetUniverse(config.UniverseID)
-	if err != nil {
-		logger.Error("Failed to get universe", "error", err)
-		return nil, fmt.Errorf("universe not found: %w", err)
-	}
-
-	logger.Info("Using existing universe", "universe_name", universe.Name,
-		"sectors", universe.SectorCount, "systems", universe.SystemCount, "planets", universe.PlanetCount)
 
 	// Delete existing games (single game design)
 	if err := s.deleteExistingGames(); err != nil {
@@ -57,25 +57,37 @@ func (s *Service) CreateGame(config GameConfig) (*Game, error) {
 
 	logger.Info("Game created successfully", "game_id", game.ID)
 
+	// Generate the universe content
+	err = s.generateUniverse(game.ID, universeConfig)
+	if err != nil {
+		logger.Error("Failed to generate universe", "game_id", game.ID, "error", err)
+		// Clean up the game if generation failed
+		s.gameRepo.DeleteGame(game.ID)
+		return nil, fmt.Errorf("failed to generate universe: %w", err)
+	}
+
 	// Activate the game
 	if err := s.gameRepo.ActivateGame(game.ID); err != nil {
 		logger.Error("Failed to activate game", "error", err)
 		return nil, fmt.Errorf("failed to activate game: %w", err)
 	}
 
-	// Update the game object with activation details
-	game.Status = GameStatusActive
-	game.CurrentTurn = 1
-	nextTurn := time.Now().Add(1 * time.Hour).Truncate(time.Hour)
-	game.NextTurnAt = &nextTurn
+	// Reload the game with updated counts and status
+	updatedGame, err := s.gameRepo.GetGameByID(game.ID)
+	if err != nil {
+		logger.Error("Failed to reload game", "error", err)
+		return nil, fmt.Errorf("failed to reload game: %w", err)
+	}
 
 	logger.Info("Game created and activated successfully",
-		"game_id", game.ID,
-		"name", game.Name,
-		"universe_id", universe.ID,
-		"next_turn_at", nextTurn)
+		"game_id", updatedGame.ID,
+		"name", updatedGame.Name,
+		"galaxies", updatedGame.GalaxyCount,
+		"sectors", updatedGame.SectorCount,
+		"systems", updatedGame.SystemCount,
+		"planets", updatedGame.PlanetCount)
 
-	return game, nil
+	return updatedGame, nil
 }
 
 // GetAllGames retrieves all games
@@ -123,5 +135,79 @@ func (s *Service) deleteExistingGames() error {
 	}
 
 	logger.Info("Successfully deleted all existing games", "deleted_count", len(existingGames))
+	return nil
+}
+
+// generateUniverse orchestrates the generation of universe content for the game
+func (s *Service) generateUniverse(gameID int, config UniverseConfig) error {
+	s.logger.Info("Starting universe generation", "game_id", gameID)
+
+	var totalGalaxies, totalSectors, totalSystems, totalPlanets int
+
+	// Generate galaxies for the game
+	galaxyCount, err := s.galaxyService.GenerateGalaxies(gameID)
+	if err != nil {
+		return fmt.Errorf("failed to generate galaxies: %w", err)
+	}
+	totalGalaxies += galaxyCount
+
+	// Get all galaxies to generate their content
+	galaxies, err := s.galaxyService.GetGalaxiesByGameID(gameID)
+	if err != nil {
+		return fmt.Errorf("failed to get galaxies: %w", err)
+	}
+
+	for _, galaxy := range galaxies {
+		// Generate sectors for this galaxy
+		sectorCount, err := s.sectorService.GenerateSectors(galaxy.ID, config.SectorsPerGalaxy)
+		if err != nil {
+			return fmt.Errorf("failed to generate sectors for galaxy %d: %w", galaxy.ID, err)
+		}
+		totalSectors += sectorCount
+
+		// Get all sectors in this galaxy to generate their content
+		sectors, err := s.sectorService.GetSectorsByGalaxyID(galaxy.ID)
+		if err != nil {
+			return fmt.Errorf("failed to get sectors for galaxy %d: %w", galaxy.ID, err)
+		}
+
+		for _, sector := range sectors {
+			// Generate systems for this sector
+			systemCount, err := s.systemService.GenerateSystems(sector.ID, config.SystemsPerSector)
+			if err != nil {
+				return fmt.Errorf("failed to generate systems for sector %d: %w", sector.ID, err)
+			}
+			totalSystems += systemCount
+
+			// Get all systems in this sector to generate their content
+			systems, err := s.systemService.GetSystemsBySectorID(sector.ID)
+			if err != nil {
+				return fmt.Errorf("failed to get systems for sector %d: %w", sector.ID, err)
+			}
+
+			for _, system := range systems {
+				// Generate planets for this system
+				planetCount, err := s.planetService.GeneratePlanets(system.ID, config.MinPlanetsPerSystem, config.MaxPlanetsPerSystem)
+				if err != nil {
+					return fmt.Errorf("failed to generate planets for system %d: %w", system.ID, err)
+				}
+				totalPlanets += planetCount
+			}
+		}
+	}
+
+	// Update the game with final counts
+	err = s.gameRepo.UpdateGameCounts(gameID, totalGalaxies, totalSectors, totalSystems, totalPlanets)
+	if err != nil {
+		return fmt.Errorf("failed to update game counts: %w", err)
+	}
+
+	s.logger.Info("Universe generation completed",
+		"game_id", gameID,
+		"galaxies", totalGalaxies,
+		"sectors", totalSectors,
+		"systems", totalSystems,
+		"planets", totalPlanets)
+
 	return nil
 }
