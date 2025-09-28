@@ -1,13 +1,12 @@
--- Indexes
 CREATE INDEX IF NOT EXISTS idx_games_status ON games(status);
 CREATE INDEX IF NOT EXISTS idx_games_next_turn ON games(next_turn_at) WHERE next_turn_at IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_galaxies_game_id ON galaxies(game_id);
-CREATE INDEX IF NOT EXISTS idx_sectors_galaxy_id ON sectors(galaxy_id);
-CREATE INDEX IF NOT EXISTS idx_sectors_coordinates ON sectors(galaxy_id, sector_x, sector_y);
-CREATE INDEX IF NOT EXISTS idx_systems_sector_id ON systems(sector_id);
-CREATE INDEX IF NOT EXISTS idx_systems_coordinates ON systems(sector_id, system_x, system_y);
-CREATE INDEX IF NOT EXISTS idx_planets_game_id ON planets(game_id);
+CREATE INDEX IF NOT EXISTS idx_spatial_entities_game_id ON spatial_entities(game_id);
+CREATE INDEX IF NOT EXISTS idx_spatial_entities_parent_id ON spatial_entities(parent_id);
+CREATE INDEX IF NOT EXISTS idx_spatial_entities_type_level ON spatial_entities(entity_type, level);
+CREATE INDEX IF NOT EXISTS idx_spatial_entities_coords ON spatial_entities(parent_id, x_coord, y_coord);
+CREATE INDEX IF NOT EXISTS idx_spatial_entities_game_level ON spatial_entities(game_id, level);
 CREATE INDEX IF NOT EXISTS idx_planets_system_id ON planets(system_id);
+CREATE INDEX IF NOT EXISTS idx_planets_game_id ON planets(game_id);
 CREATE INDEX IF NOT EXISTS idx_planets_owner_id ON planets(owner_id);
 CREATE INDEX IF NOT EXISTS idx_planets_game_owner ON planets(game_id, owner_id);
 CREATE INDEX IF NOT EXISTS idx_planets_homeworld ON planets(is_homeworld) WHERE is_homeworld = true;
@@ -17,7 +16,6 @@ CREATE INDEX IF NOT EXISTS idx_game_players_player_id ON game_players(player_id)
 CREATE INDEX IF NOT EXISTS idx_game_players_homeworld ON game_players(homeworld_planet_id);
 CREATE INDEX IF NOT EXISTS idx_player_stats_game_player ON player_stats(game_id, player_id);
 
--- Functions (DEFINE THESE FIRST!)
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -30,25 +28,29 @@ CREATE OR REPLACE FUNCTION update_counts()
 RETURNS TRIGGER AS $$
 BEGIN
     IF TG_OP = 'INSERT' THEN
-        IF TG_TABLE_NAME = 'galaxies' THEN
-            UPDATE games SET galaxy_count = galaxy_count + 1 WHERE id = NEW.game_id;
-        ELSIF TG_TABLE_NAME = 'sectors' THEN
-            UPDATE galaxies SET sector_count = sector_count + 1 WHERE id = NEW.galaxy_id;
-        ELSIF TG_TABLE_NAME = 'systems' THEN
-            UPDATE sectors SET system_count = system_count + 1 WHERE id = NEW.sector_id;
+        IF TG_TABLE_NAME = 'spatial_entities' THEN
+            -- Update parent's child count
+            IF NEW.parent_id IS NOT NULL THEN
+                UPDATE spatial_entities SET child_count = child_count + 1 WHERE id = NEW.parent_id;
+            END IF;
         ELSIF TG_TABLE_NAME = 'planets' THEN
-            UPDATE systems SET planet_count = planet_count + 1 WHERE id = NEW.system_id;
+            -- Update system's child count (planets)
+            UPDATE spatial_entities SET child_count = child_count + 1 WHERE id = NEW.system_id;
+            -- Update game's total planet count
+            UPDATE games SET total_planets = total_planets + 1 WHERE id = NEW.game_id;
         END IF;
         RETURN NEW;
     ELSIF TG_OP = 'DELETE' THEN
-        IF TG_TABLE_NAME = 'galaxies' THEN
-            UPDATE games SET galaxy_count = galaxy_count - 1 WHERE id = OLD.game_id;
-        ELSIF TG_TABLE_NAME = 'sectors' THEN
-            UPDATE galaxies SET sector_count = sector_count - 1 WHERE id = OLD.galaxy_id;
-        ELSIF TG_TABLE_NAME = 'systems' THEN
-            UPDATE sectors SET system_count = system_count - 1 WHERE id = OLD.sector_id;
+        IF TG_TABLE_NAME = 'spatial_entities' THEN
+            -- Update parent's child count
+            IF OLD.parent_id IS NOT NULL THEN
+                UPDATE spatial_entities SET child_count = child_count - 1 WHERE id = OLD.parent_id;
+            END IF;
         ELSIF TG_TABLE_NAME = 'planets' THEN
-            UPDATE systems SET planet_count = planet_count - 1 WHERE id = OLD.system_id;
+            -- Update system's child count (planets)
+            UPDATE spatial_entities SET child_count = child_count - 1 WHERE id = OLD.system_id;
+            -- Update game's total planet count
+            UPDATE games SET total_planets = total_planets - 1 WHERE id = OLD.game_id;
         END IF;
         RETURN OLD;
     END IF;
@@ -100,16 +102,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Triggers (AFTER functions are defined)
 CREATE TRIGGER update_games_updated_at BEFORE UPDATE ON games FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_galaxies_updated_at BEFORE UPDATE ON galaxies FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_sectors_updated_at BEFORE UPDATE ON sectors FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_systems_updated_at BEFORE UPDATE ON systems FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_spatial_entities_updated_at BEFORE UPDATE ON spatial_entities FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_planets_updated_at BEFORE UPDATE ON planets FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_player_stats_updated_at BEFORE UPDATE ON player_stats FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER trigger_update_galaxy_count AFTER INSERT OR DELETE ON galaxies FOR EACH ROW EXECUTE FUNCTION update_counts();
-CREATE TRIGGER trigger_update_sector_count AFTER INSERT OR DELETE ON sectors FOR EACH ROW EXECUTE FUNCTION update_counts();
-CREATE TRIGGER trigger_update_system_count AFTER INSERT OR DELETE ON systems FOR EACH ROW EXECUTE FUNCTION update_counts();
+CREATE TRIGGER trigger_update_entity_count AFTER INSERT OR DELETE ON spatial_entities FOR EACH ROW EXECUTE FUNCTION update_counts();
 CREATE TRIGGER trigger_update_planet_count AFTER INSERT OR DELETE ON planets FOR EACH ROW EXECUTE FUNCTION update_counts();
 CREATE TRIGGER trigger_update_player_stats AFTER INSERT OR UPDATE OR DELETE ON planets FOR EACH ROW EXECUTE FUNCTION update_player_stats();
