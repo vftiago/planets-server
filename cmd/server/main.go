@@ -9,17 +9,15 @@ import (
 	"syscall"
 
 	"planets-server/internal/auth"
-	"planets-server/internal/galaxy"
 	"planets-server/internal/game"
 	"planets-server/internal/middleware"
 	"planets-server/internal/planet"
 	"planets-server/internal/player"
-	"planets-server/internal/sector"
 	"planets-server/internal/server"
 	"planets-server/internal/shared/config"
 	"planets-server/internal/shared/database"
 	"planets-server/internal/shared/logger"
-	"planets-server/internal/system"
+	"planets-server/internal/spatial"
 )
 
 func main() {
@@ -62,20 +60,16 @@ func main() {
 	authService := auth.NewService(authRepo, logger)
 
 	// Initialize domain repositories
-	galaxyRepo := galaxy.NewRepository(db.DB, logger)
-	sectorRepo := sector.NewRepository(db.DB, logger)
-	systemRepo := system.NewRepository(db.DB, logger)
+	spatialRepo := spatial.NewRepository(db.DB, logger)
 	planetRepo := planet.NewRepository(db.DB, logger)
 
 	// Initialize domain services
-	galaxyService := galaxy.NewService(galaxyRepo, logger)
-	sectorService := sector.NewService(sectorRepo, logger)
-	systemService := system.NewService(systemRepo, logger)
+	spatialService := spatial.NewService(spatialRepo, logger)
 	planetService := planet.NewService(planetRepo, logger)
 
 	// Initialize game
 	gameRepo := game.NewRepository(db.DB, logger)
-	gameService := game.NewService(gameRepo, galaxyService, sectorService, systemService, planetService, logger)
+	gameService := game.NewService(gameRepo, spatialService, planetService, logger)
 
 	corsMiddleware := initCORS()
 	rateLimiter := initRateLimit()

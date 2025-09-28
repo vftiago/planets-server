@@ -31,19 +31,18 @@ func (r *Repository) CreateGame(config GameConfig) (*Game, error) {
 	logger.Info("Creating new game")
 
 	query := `
-		INSERT INTO games (name, description, status, current_turn, max_players, turn_interval_hours)
+		INSERT INTO games (name, description, universe_name, universe_description, status, current_turn, max_players, turn_interval_hours)
 		VALUES ($1, $2, $3, $4, 'creating', 0, $5, $6)
-		RETURNING id, name, description, galaxy_count, sector_count, system_count, planet_count, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
+		RETURNING id, name, description, universe_name, universe_description, planet_count, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
 	`
 
 	var game Game
-	err := r.db.QueryRow(query, config.Name, config.Description, config.MaxPlayers, config.TurnIntervalHours).Scan(
+	err := r.db.QueryRow(query, config.Name, config.Description, config.UniverseName, config.UniverseDescription, config.MaxPlayers, config.TurnIntervalHours).Scan(
 		&game.ID,
 		&game.Name,
 		&game.Description,
-		&game.GalaxyCount,
-		&game.SectorCount,
-		&game.SystemCount,
+		&game.UniverseName,
+		&game.UniverseDescription,
 		&game.PlanetCount,
 		&game.Status,
 		&game.CurrentTurn,
@@ -68,7 +67,7 @@ func (r *Repository) GetGameByID(gameID int) (*Game, error) {
 	logger.Debug("Getting game by ID")
 
 	query := `
-		SELECT id, name, description, galaxy_count, sector_count, system_count, planet_count, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
+		SELECT id, name, description, universe_name, universe_description, planet_count, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
 		FROM games
 		WHERE id = $1
 	`
@@ -78,9 +77,8 @@ func (r *Repository) GetGameByID(gameID int) (*Game, error) {
 		&game.ID,
 		&game.Name,
 		&game.Description,
-		&game.GalaxyCount,
-		&game.SectorCount,
-		&game.SystemCount,
+		&game.UniverseName,
+		&game.UniverseDescription,
 		&game.PlanetCount,
 		&game.Status,
 		&game.CurrentTurn,
@@ -109,7 +107,7 @@ func (r *Repository) GetAllGames() ([]Game, error) {
 	logger.Debug("Getting all games")
 
 	query := `
-		SELECT id, name, description, galaxy_count, sector_count, system_count, planet_count, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
+		SELECT id, name, description, universe_name, universe_description, planet_count, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
 		FROM games
 		ORDER BY created_at DESC
 	`
@@ -132,9 +130,8 @@ func (r *Repository) GetAllGames() ([]Game, error) {
 			&game.ID,
 			&game.Name,
 			&game.Description,
-			&game.GalaxyCount,
-			&game.SectorCount,
-			&game.SystemCount,
+			&game.UniverseName,
+			&game.UniverseDescription,
 			&game.PlanetCount,
 			&game.Status,
 			&game.CurrentTurn,
@@ -232,9 +229,6 @@ func (r *Repository) GetGameStats(gameID int) (*GameStats, error) {
 			COALESCE(player_count.count, 0) as player_count,
 			g.max_players,
 			g.next_turn_at,
-			g.galaxy_count,
-			g.sector_count,
-			g.system_count,
 			g.planet_count
 		FROM games g
 		LEFT JOIN (
@@ -254,9 +248,6 @@ func (r *Repository) GetGameStats(gameID int) (*GameStats, error) {
 		&stats.PlayerCount,
 		&stats.MaxPlayers,
 		&stats.NextTurnAt,
-		&stats.GalaxyCount,
-		&stats.SectorCount,
-		&stats.SystemCount,
 		&stats.PlanetCount,
 	)
 
@@ -301,16 +292,16 @@ func (r *Repository) DeleteGame(gameID int) error {
 }
 
 // UpdateGameCounts updates the counts for a game after universe generation
-func (r *Repository) UpdateGameCounts(gameID int, galaxyCount, sectorCount, systemCount, planetCount int) error {
+func (r *Repository) UpdateGameCounts(gameID int, planetCount int) error {
 	logger := r.logger.With("component", "game_repository", "operation", "update_counts", "game_id", gameID)
 	logger.Debug("Updating game counts")
 
 	query := `
 		UPDATE games 
-		SET galaxy_count = $2, sector_count = $3, system_count = $4, planet_count = $5, updated_at = NOW()
+		SET planet_count = $2, updated_at = NOW()
 		WHERE id = $1`
 
-	result, err := r.db.Exec(query, gameID, galaxyCount, sectorCount, systemCount, planetCount)
+	result, err := r.db.Exec(query, gameID, planetCount)
 	if err != nil {
 		logger.Error("Failed to update game counts", "error", err)
 		return fmt.Errorf("failed to update game counts: %w", err)
@@ -327,6 +318,6 @@ func (r *Repository) UpdateGameCounts(gameID int, galaxyCount, sectorCount, syst
 		return fmt.Errorf("game not found")
 	}
 
-	logger.Debug("Game counts updated", "galaxies", galaxyCount, "sectors", sectorCount, "systems", systemCount, "planets", planetCount)
+	logger.Debug("Game counts updated", "planets", planetCount)
 	return nil
 }

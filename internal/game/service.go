@@ -4,36 +4,28 @@ import (
 	"fmt"
 	"log/slog"
 
-	"planets-server/internal/galaxy"
 	"planets-server/internal/planet"
-	"planets-server/internal/sector"
-	"planets-server/internal/system"
+	"planets-server/internal/spatial"
 )
 
 type Service struct {
-	gameRepo      *Repository
-	galaxyService *galaxy.Service
-	sectorService *sector.Service
-	systemService *system.Service
-	planetService *planet.Service
-	logger        *slog.Logger
+	gameRepo       *Repository
+	spatialService *spatial.Service
+	planetService  *planet.Service
+	logger         *slog.Logger
 }
 
 func NewService(
 	gameRepo *Repository,
-	galaxyService *galaxy.Service,
-	sectorService *sector.Service,
-	systemService *system.Service,
+	spatialService *spatial.Service,
 	planetService *planet.Service,
 	logger *slog.Logger,
 ) *Service {
 	return &Service{
-		gameRepo:      gameRepo,
-		galaxyService: galaxyService,
-		sectorService: sectorService,
-		systemService: systemService,
-		planetService: planetService,
-		logger:        logger,
+		gameRepo:       gameRepo,
+		spatialService: spatialService,
+		planetService:  planetService,
+		logger:         logger,
 	}
 }
 
@@ -82,9 +74,6 @@ func (s *Service) CreateGame(config GameConfig, universeConfig UniverseConfig) (
 	logger.Info("Game created and activated successfully",
 		"game_id", updatedGame.ID,
 		"name", updatedGame.Name,
-		"galaxies", updatedGame.GalaxyCount,
-		"sectors", updatedGame.SectorCount,
-		"systems", updatedGame.SystemCount,
 		"planets", updatedGame.PlanetCount)
 
 	return updatedGame, nil
@@ -142,71 +131,53 @@ func (s *Service) deleteExistingGames() error {
 func (s *Service) generateUniverse(gameID int, config UniverseConfig) error {
 	s.logger.Info("Starting universe generation", "game_id", gameID)
 
-	var totalGalaxies, totalSectors, totalSystems, totalPlanets int
-
-	// Generate galaxies for the game
-	galaxyCount, err := s.galaxyService.GenerateGalaxies(gameID)
+	// Level 1: Generate all galaxies (parent_id = game_id)
+	galaxies, err := s.spatialService.GenerateEntities(gameID, gameID, spatial.EntityTypeGalaxy, config.GalaxyCount)
 	if err != nil {
 		return fmt.Errorf("failed to generate galaxies: %w", err)
 	}
-	totalGalaxies += galaxyCount
 
-	// Get all galaxies to generate their content
-	galaxies, err := s.galaxyService.GetGalaxiesByGameID(gameID)
-	if err != nil {
-		return fmt.Errorf("failed to get galaxies: %w", err)
-	}
-
+	// Level 2: Generate all sectors for all galaxies
+	var sectors []spatial.SpatialEntity
 	for _, galaxy := range galaxies {
-		// Generate sectors for this galaxy
-		sectorCount, err := s.sectorService.GenerateSectors(galaxy.ID, config.SectorsPerGalaxy)
+		galaxySectors, err := s.spatialService.GenerateEntities(gameID, galaxy.ID, spatial.EntityTypeSector, config.SectorsPerGalaxy)
 		if err != nil {
 			return fmt.Errorf("failed to generate sectors for galaxy %d: %w", galaxy.ID, err)
 		}
-		totalSectors += sectorCount
+		sectors = append(sectors, galaxySectors...)
+	}
 
-		// Get all sectors in this galaxy to generate their content
-		sectors, err := s.sectorService.GetSectorsByGalaxyID(galaxy.ID)
+	// Level 3: Generate all systems for all sectors
+	var systems []spatial.SpatialEntity
+	for _, sector := range sectors {
+		sectorSystems, err := s.spatialService.GenerateEntities(gameID, sector.ID, spatial.EntityTypeSystem, config.SystemsPerSector)
 		if err != nil {
-			return fmt.Errorf("failed to get sectors for galaxy %d: %w", galaxy.ID, err)
+			return fmt.Errorf("failed to generate systems for sector %d: %w", sector.ID, err)
 		}
+		systems = append(systems, sectorSystems...)
+	}
 
-		for _, sector := range sectors {
-			// Generate systems for this sector
-			systemCount, err := s.systemService.GenerateSystems(sector.ID, config.SystemsPerSector)
-			if err != nil {
-				return fmt.Errorf("failed to generate systems for sector %d: %w", sector.ID, err)
-			}
-			totalSystems += systemCount
-
-			// Get all systems in this sector to generate their content
-			systems, err := s.systemService.GetSystemsBySectorID(sector.ID)
-			if err != nil {
-				return fmt.Errorf("failed to get systems for sector %d: %w", sector.ID, err)
-			}
-
-			for _, system := range systems {
-				// Generate planets for this system
-				planetCount, err := s.planetService.GeneratePlanets(system.ID, config.MinPlanetsPerSystem, config.MaxPlanetsPerSystem)
-				if err != nil {
-					return fmt.Errorf("failed to generate planets for system %d: %w", system.ID, err)
-				}
-				totalPlanets += planetCount
-			}
+	// Level 4: Generate all planets for all systems
+	var totalPlanets int
+	for _, system := range systems {
+		planetCount, err := s.planetService.GeneratePlanets(system.ID, config.MinPlanetsPerSystem, config.MaxPlanetsPerSystem)
+		if err != nil {
+			return fmt.Errorf("failed to generate planets for system %d: %w", system.ID, err)
 		}
+		totalPlanets += planetCount
 	}
 
 	// Update the game with final counts
-	err = s.gameRepo.UpdateGameCounts(gameID, totalGalaxies, totalSectors, totalSystems, totalPlanets)
+	err = s.gameRepo.UpdateGameCounts(gameID, totalPlanets)
 	if err != nil {
 		return fmt.Errorf("failed to update game counts: %w", err)
 	}
 
 	s.logger.Info("Universe generation completed",
 		"game_id", gameID,
-		"galaxies", totalGalaxies,
-		"sectors", totalSectors,
-		"systems", totalSystems,
+		"galaxies", len(galaxies),
+		"sectors", len(sectors),
+		"systems", len(systems),
 		"planets", totalPlanets)
 
 	return nil

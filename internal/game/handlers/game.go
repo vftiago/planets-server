@@ -52,6 +52,9 @@ func (h *GameHandler) CreateGame(w http.ResponseWriter, r *http.Request) {
 	if request.Game.TurnIntervalHours == 0 {
 		request.Game.TurnIntervalHours = 1
 	}
+	if request.Game.UniverseName == "" {
+		request.Game.UniverseName = "Game Universe"
+	}
 
 	// Set defaults for universe configuration
 	if request.Universe.GalaxyCount == 0 {
@@ -97,9 +100,6 @@ func (h *GameHandler) CreateGame(w http.ResponseWriter, r *http.Request) {
 		"game_id", createdGame.ID,
 		"name", createdGame.Name,
 		"status", createdGame.Status,
-		"galaxies", createdGame.GalaxyCount,
-		"sectors", createdGame.SectorCount,
-		"systems", createdGame.SystemCount,
 		"planets", createdGame.PlanetCount)
 }
 
