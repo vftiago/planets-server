@@ -4,15 +4,16 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"planets-server/internal/shared/database"
 	"time"
 )
 
 type Repository struct {
-	db     *sql.DB
+	db     *database.DB
 	logger *slog.Logger
 }
 
-func NewRepository(db *sql.DB, logger *slog.Logger) *Repository {
+func NewRepository(db *database.DB, logger *slog.Logger) *Repository {
 	logger.Debug("Initializing game repository")
 
 	return &Repository{
@@ -21,7 +22,16 @@ func NewRepository(db *sql.DB, logger *slog.Logger) *Repository {
 	}
 }
 
-func (r *Repository) CreateGame(config GameConfig) (*Game, error) {
+func (r *Repository) getExecutor(tx *database.Tx) database.Executor {
+	if tx != nil {
+		return tx
+	}
+	return r.db
+}
+
+func (r *Repository) CreateGame(config GameConfig, tx *database.Tx) (*Game, error) {
+	exec := r.getExecutor(tx)
+
 	logger := r.logger.With(
 		"component", "game_repository",
 		"operation", "create_game",
@@ -37,7 +47,7 @@ func (r *Repository) CreateGame(config GameConfig) (*Game, error) {
 	`
 
 	var game Game
-	err := r.db.QueryRow(query, config.Name, config.Description, config.UniverseName, config.UniverseDescription, config.MaxPlayers, config.TurnIntervalHours).Scan(
+	err := exec.QueryRow(query, config.Name, config.Description, config.UniverseName, config.UniverseDescription, config.MaxPlayers, config.TurnIntervalHours).Scan(
 		&game.ID,
 		&game.Name,
 		&game.Description,
@@ -183,7 +193,9 @@ func (r *Repository) UpdateGameStatus(gameID int, status GameStatus) error {
 	return nil
 }
 
-func (r *Repository) ActivateGame(gameID int) error {
+func (r *Repository) ActivateGame(gameID int, tx *database.Tx) error {
+	exec := r.getExecutor(tx)
+
 	logger := slog.With("component", "game_repository", "operation", "activate_game", "game_id", gameID)
 	logger.Info("Activating game")
 
@@ -195,7 +207,7 @@ func (r *Repository) ActivateGame(gameID int) error {
 		WHERE id = $2 AND status = 'creating'
 	`
 
-	result, err := r.db.Exec(query, nextTurnAt, gameID)
+	result, err := exec.Exec(query, nextTurnAt, gameID)
 	if err != nil {
 		logger.Error("Failed to activate game", "error", err)
 		return fmt.Errorf("failed to activate game: %w", err)
@@ -291,8 +303,9 @@ func (r *Repository) DeleteGame(gameID int) error {
 	return nil
 }
 
-// UpdateGameCounts updates the counts for a game after universe generation
-func (r *Repository) UpdateGameCounts(gameID int, planetCount int) error {
+func (r *Repository) UpdateGameCounts(gameID int, planetCount int, tx *database.Tx) error {
+	exec := r.getExecutor(tx)
+
 	logger := r.logger.With("component", "game_repository", "operation", "update_counts", "game_id", gameID)
 	logger.Debug("Updating game counts")
 
@@ -301,7 +314,7 @@ func (r *Repository) UpdateGameCounts(gameID int, planetCount int) error {
 		SET planet_count = $2, updated_at = NOW()
 		WHERE id = $1`
 
-	result, err := r.db.Exec(query, gameID, planetCount)
+	result, err := exec.Exec(query, gameID, planetCount)
 	if err != nil {
 		logger.Error("Failed to update game counts", "error", err)
 		return fmt.Errorf("failed to update game counts: %w", err)

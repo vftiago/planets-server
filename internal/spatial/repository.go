@@ -4,19 +4,27 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"planets-server/internal/shared/database"
 )
 
 type Repository struct {
-	db     *sql.DB
+	db     *database.DB
 	logger *slog.Logger
 }
 
-func NewRepository(db *sql.DB, logger *slog.Logger) *Repository {
+func NewRepository(db *database.DB, logger *slog.Logger) *Repository {
 	logger.Debug("Initializing spatial repository")
 	return &Repository{
 		db:     db,
 		logger: logger,
 	}
+}
+
+func (r *Repository) getExecutor(tx *database.Tx) database.Executor {
+	if tx != nil {
+		return tx
+	}
+	return r.db
 }
 
 func (r *Repository) GetEntitiesByParent(parentID int, entityType EntityType) ([]SpatialEntity, error) {
@@ -86,7 +94,9 @@ func (r *Repository) GetEntitiesByParent(parentID int, entityType EntityType) ([
 	return entities, nil
 }
 
-func (r *Repository) CreateEntity(gameID, parentID int, entityType EntityType, level int, x, y int, name, description string) (*SpatialEntity, error) {
+func (r *Repository) CreateEntity(gameID, parentID int, entityType EntityType, level int, x, y int, name, description string, tx *database.Tx) (*SpatialEntity, error) {
+	exec := r.getExecutor(tx)
+	
 	logger := r.logger.With(
 		"component", "spatial_repository",
 		"operation", "create_entity",
@@ -106,7 +116,7 @@ func (r *Repository) CreateEntity(gameID, parentID int, entityType EntityType, l
 	var entity SpatialEntity
 	var descriptionVal sql.NullString
 
-	err := r.db.QueryRow(query, gameID, parentID, entityType, level, x, y, name, description).Scan(
+	err := exec.QueryRow(query, gameID, parentID, entityType, level, x, y, name, description).Scan(
 		&entity.ID,
 		&entity.GameID,
 		&entity.ParentID,

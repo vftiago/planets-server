@@ -252,9 +252,9 @@ func loadUniverseConfig() UniverseConfig {
 
 func loadAdminConfig() AdminConfig {
 	return AdminConfig{
-		Email: utils.GetEnv("ADMIN_EMAIL", "admin@localhost"),
+		Email:       utils.GetEnv("ADMIN_EMAIL", "admin@localhost"),
 		Username:    utils.GetEnv("ADMIN_USERNAME", "admin"),
-    DisplayName: utils.GetEnv("ADMIN_DISPLAY_NAME", "Admin"),
+		DisplayName: utils.GetEnv("ADMIN_DISPLAY_NAME", "Admin"),
 	}
 }
 

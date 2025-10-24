@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
+	"planets-server/internal/shared/database"
 )
 
 type Service struct {
@@ -21,7 +22,7 @@ func NewService(repo *Repository, logger *slog.Logger) *Service {
 }
 
 // GeneratePlanets creates planets in a system according to the provided configuration
-func (s *Service) GeneratePlanets(systemID int, minPlanets, maxPlanets int) (int, error) {
+func (s *Service) GeneratePlanets(systemID int, minPlanets, maxPlanets int, tx *database.Tx) (int, error) {
 	logger := s.logger.With("component", "planet_service", "operation", "generate_planets", "system_id", systemID, "min_planets", minPlanets, "max_planets", maxPlanets)
 	logger.Debug("Generating planets")
 
@@ -31,7 +32,7 @@ func (s *Service) GeneratePlanets(systemID int, minPlanets, maxPlanets int) (int
 	for i := 0; i < planetCount; i++ {
 		planetName := fmt.Sprintf("Planet %s", planetNames[i%len(planetNames)])
 
-		_, err := s.repo.CreatePlanet(systemID, i, planetName, s.generateRandomPlanetType(), 50+rand.Intn(151), int64(100000+rand.Intn(900000)))
+		_, err := s.repo.CreatePlanet(systemID, i, planetName, s.generateRandomPlanetType(), 50+rand.Intn(151), int64(100000+rand.Intn(900000)), tx)
 		if err != nil {
 			logger.Error("Failed to create planet", "error", err, "planet_name", planetName)
 			return 0, fmt.Errorf("failed to create planet: %w", err)

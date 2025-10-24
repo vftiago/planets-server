@@ -1,17 +1,17 @@
 package planet
 
 import (
-	"database/sql"
 	"fmt"
 	"log/slog"
+	"planets-server/internal/shared/database"
 )
 
 type Repository struct {
-	db     *sql.DB
+	db     *database.DB
 	logger *slog.Logger
 }
 
-func NewRepository(db *sql.DB, logger *slog.Logger) *Repository {
+func NewRepository(db *database.DB, logger *slog.Logger) *Repository {
 	logger.Debug("Initializing planet repository")
 
 	return &Repository{
@@ -20,7 +20,16 @@ func NewRepository(db *sql.DB, logger *slog.Logger) *Repository {
 	}
 }
 
-func (r *Repository) CreatePlanet(systemID, planetIndex int, name string, planetType PlanetType, size int, maxPopulation int64) (*Planet, error) {
+func (r *Repository) getExecutor(tx *database.Tx) database.Executor {
+	if tx != nil {
+		return tx
+	}
+	return r.db
+}
+
+func (r *Repository) CreatePlanet(systemID, planetIndex int, name string, planetType PlanetType, size int, maxPopulation int64, tx *database.Tx) (*Planet, error) {
+	exec := r.getExecutor(tx)
+	
 	logger := r.logger.With(
 		"component", "planet_repository",
 		"operation", "create_planet",
@@ -33,11 +42,11 @@ func (r *Repository) CreatePlanet(systemID, planetIndex int, name string, planet
 	query := `
 		INSERT INTO planets (system_id, planet_index, name, type, size, population, max_population, owner_id, is_homeworld)
 		VALUES ($1, $2, $3, $4, $5, 0, $6, NULL, false)
-		RETURNING id, system_id, planet_index, name, type, size, population, max_population, owner_id, is_homeworld, created_at, updated_at
+		RETURNING id, system_id, planet_index, name, type, size, population, max_population, owner_id, created_at, updated_at
 	`
 
 	var planet Planet
-	err := r.db.QueryRow(query, systemID, planetIndex, name, planetType, size, maxPopulation).Scan(
+	err := exec.QueryRow(query, systemID, planetIndex, name, planetType, size, maxPopulation).Scan(
 		&planet.ID,
 		&planet.SystemID,
 		&planet.PlanetIndex,

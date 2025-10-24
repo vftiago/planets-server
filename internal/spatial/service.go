@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"planets-server/internal/shared/database"
 )
 
 type Service struct {
@@ -22,9 +23,9 @@ func (s *Service) GetEntitiesByParent(parentID int, entityType EntityType) ([]Sp
 	return s.repo.GetEntitiesByParent(parentID, entityType)
 }
 
-func (s *Service) CreateEntity(gameID, parentID int, entityType EntityType, x, y int, name string) (*SpatialEntity, error) {
+func (s *Service) CreateEntity(gameID, parentID int, entityType EntityType, x, y int, name string, tx *database.Tx) (*SpatialEntity, error) {
 	level := EntityLevels[entityType]
-	return s.repo.CreateEntity(gameID, parentID, entityType, level, x, y, name, "")
+	return s.repo.CreateEntity(gameID, parentID, entityType, level, x, y, name, "", tx)
 }
 
 func (s *Service) GetGalaxiesByGame(gameID int) ([]SpatialEntity, error) {
@@ -39,7 +40,7 @@ func (s *Service) GetSystemsBySector(sectorID int) ([]SpatialEntity, error) {
 	return s.GetEntitiesByParent(sectorID, EntityTypeSystem)
 }
 
-func (s *Service) GenerateEntities(gameID, parentID int, entityType EntityType, count int) ([]SpatialEntity, error) {
+func (s *Service) GenerateEntities(gameID, parentID int, entityType EntityType, count int, tx *database.Tx) ([]SpatialEntity, error) {
 	logger := s.logger.With(
 		"operation", "generate_entities",
 		"type", entityType,
@@ -67,7 +68,7 @@ func (s *Service) GenerateEntities(gameID, parentID int, entityType EntityType, 
 			name := names[nameIndex%len(names)]
 			nameIndex++
 			
-			entity, err := s.CreateEntity(gameID, parentID, entityType, x, y, name)
+			entity, err := s.CreateEntity(gameID, parentID, entityType, x, y, name, tx)
 			if err != nil {
 				logger.Error("Failed to create entity", "error", err, "coordinates", fmt.Sprintf("(%d,%d)", x, y))
 				return nil, fmt.Errorf("failed to create %s at (%d,%d): %w", entityType, x, y, err)

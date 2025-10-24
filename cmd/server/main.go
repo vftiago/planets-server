@@ -54,21 +54,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	playerRepo := player.NewRepository(db.DB)
-	playerService := player.NewService(playerRepo, logger)
-	authRepo := auth.NewRepository(db.DB)
-	authService := auth.NewService(authRepo, logger)
-
 	// Initialize domain repositories
-	spatialRepo := spatial.NewRepository(db.DB, logger)
-	planetRepo := planet.NewRepository(db.DB, logger)
+	authRepo := auth.NewRepository(db)
+	playerRepo := player.NewRepository(db)
+	spatialRepo := spatial.NewRepository(db, logger)
+	planetRepo := planet.NewRepository(db, logger)
 
 	// Initialize domain services
+	authService := auth.NewService(authRepo, logger)
+	playerService := player.NewService(playerRepo, logger)
 	spatialService := spatial.NewService(spatialRepo, logger)
 	planetService := planet.NewService(planetRepo, logger)
 
 	// Initialize game
-	gameRepo := game.NewRepository(db.DB, logger)
+	gameRepo := game.NewRepository(db, logger)
 	gameService := game.NewService(gameRepo, spatialService, planetService, logger)
 
 	corsMiddleware := initCORS()
