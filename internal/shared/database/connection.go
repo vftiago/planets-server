@@ -13,6 +13,24 @@ type DB struct {
 	*sql.DB
 }
 
+type Tx struct {
+	*sql.Tx
+}
+
+type Executor interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+	QueryRow(query string, args ...interface{}) *sql.Row
+}
+
+func (db *DB) BeginTx() (*Tx, error) {
+	tx, err := db.DB.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	return &Tx{tx}, nil
+}
+
 func Connect() (*DB, error) {
 	cfg := config.GlobalConfig
 	logger := slog.With("component", "database", "operation", "connect")

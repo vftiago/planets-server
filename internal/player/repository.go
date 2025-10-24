@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 	"planets-server/internal/shared/config"
+	"planets-server/internal/shared/database"
 )
 
 type Repository struct {
-	db *sql.DB
+	db *database.DB
 }
 
-func NewRepository(db *sql.DB) *Repository {
+func NewRepository(db *database.DB) *Repository {
 	logger := slog.With("component", "player_repository", "operation", "init")
 	logger.Debug("Initializing player repository")
 	return &Repository{db: db}
