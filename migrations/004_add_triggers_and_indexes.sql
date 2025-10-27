@@ -8,10 +8,8 @@ CREATE INDEX IF NOT EXISTS idx_spatial_entities_coords ON spatial_entities(paren
 CREATE INDEX IF NOT EXISTS idx_spatial_entities_game_level ON spatial_entities(game_id, level);
 CREATE INDEX IF NOT EXISTS idx_planets_system_id ON planets(system_id);
 CREATE INDEX IF NOT EXISTS idx_planets_owner_id ON planets(owner_id);
-CREATE INDEX IF NOT EXISTS idx_planets_homeworld ON planets(is_homeworld) WHERE is_homeworld = true;
 CREATE INDEX IF NOT EXISTS idx_game_players_game_id ON game_players(game_id);
 CREATE INDEX IF NOT EXISTS idx_game_players_player_id ON game_players(player_id);
-CREATE INDEX IF NOT EXISTS idx_game_players_homeworld ON game_players(homeworld_planet_id);
 CREATE INDEX IF NOT EXISTS idx_player_stats_game_player ON player_stats(game_id, player_id);
 
 -- Triggers

@@ -3,7 +3,6 @@ CREATE TABLE IF NOT EXISTS game_players (
     game_id INTEGER REFERENCES games(id) ON DELETE CASCADE,
     player_id INTEGER REFERENCES players(id) ON DELETE CASCADE,
     joined_at TIMESTAMP DEFAULT NOW(),
-    homeworld_planet_id INTEGER REFERENCES planets(id) ON DELETE SET NULL,
     is_active BOOLEAN NOT NULL DEFAULT true,
     UNIQUE(game_id, player_id)
 );

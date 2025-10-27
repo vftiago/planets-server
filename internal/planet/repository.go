@@ -40,7 +40,7 @@ func (r *Repository) CreatePlanet(systemID, planetIndex int, name string, planet
 	logger.Debug("Creating planet")
 
 	query := `
-		INSERT INTO planets (system_id, planet_index, name, type, size, population, max_population, owner_id, is_homeworld)
+		INSERT INTO planets (system_id, planet_index, name, type, size, population, max_population, owner_id)
 		VALUES ($1, $2, $3, $4, $5, 0, $6, NULL, false)
 		RETURNING id, system_id, planet_index, name, type, size, population, max_population, owner_id, created_at, updated_at
 	`
@@ -74,7 +74,7 @@ func (r *Repository) GetPlanetsBySystemID(systemID int) ([]Planet, error) {
 	logger.Debug("Getting planets by system ID")
 
 	query := `
-		SELECT id, system_id, planet_index, name, type, size, population, max_population, owner_id, is_homeworld, created_at, updated_at
+		SELECT id, system_id, planet_index, name, type, size, population, max_population, owner_id, created_at, updated_at
 		FROM planets
 		WHERE system_id = $1
 		ORDER BY planet_index
