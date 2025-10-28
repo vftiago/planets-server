@@ -1,6 +1,7 @@
 package player
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"planets-server/internal/shared/config"
@@ -21,23 +22,23 @@ func NewService(repo *Repository, logger *slog.Logger) *Service {
 	}
 }
 
-func (s *Service) GetPlayerCount() (int, error) {
-	return s.repo.GetPlayerCount()
+func (s *Service) GetPlayerCount(ctx context.Context) (int, error) {
+	return s.repo.GetPlayerCount(ctx)
 }
 
-func (s *Service) GetAllPlayers() ([]Player, error) {
-	return s.repo.GetAllPlayers()
+func (s *Service) GetAllPlayers(ctx context.Context) ([]Player, error) {
+	return s.repo.GetAllPlayers(ctx)
 }
 
-func (s *Service) GetPlayerByID(id int) (*Player, error) {
-	return s.repo.GetPlayerByID(id)
+func (s *Service) GetPlayerByID(ctx context.Context, id int) (*Player, error) {
+	return s.repo.GetPlayerByID(ctx, id)
 }
 
-func (s *Service) CreatePlayer(username, email, displayName string, avatarURL *string) (*Player, error) {
-	return s.repo.CreatePlayer(username, email, displayName, avatarURL)
+func (s *Service) CreatePlayer(ctx context.Context, username, email, displayName string, avatarURL *string) (*Player, error) {
+	return s.repo.CreatePlayer(ctx, username, email, displayName, avatarURL)
 }
 
-func (s *Service) FindOrCreatePlayerByOAuth(provider, providerUserID, email, displayName string, avatarURL *string) (*Player, error) {
+func (s *Service) FindOrCreatePlayerByOAuth(ctx context.Context, provider, providerUserID, email, displayName string, avatarURL *string) (*Player, error) {
 	logger := s.logger.With(
 		"component", "player_service",
 		"operation", "find_or_create_oauth",
@@ -49,7 +50,7 @@ func (s *Service) FindOrCreatePlayerByOAuth(provider, providerUserID, email, dis
 	cfg := config.GlobalConfig
 	isAdminEmail := cfg != nil && email == cfg.Admin.Email
 
-	player, err := s.repo.FindPlayerByEmail(email)
+	player, err := s.repo.FindPlayerByEmail(ctx, email)
 	if err != nil {
 		logger.Error("Database error checking for player by email", "error", err)
 		return nil, fmt.Errorf("database error: %w", err)
@@ -59,7 +60,7 @@ func (s *Service) FindOrCreatePlayerByOAuth(provider, providerUserID, email, dis
 		logger.Info("Found existing player by email", "player_id", player.ID, "role", player.Role)
 		if isAdminEmail && player.Role != PlayerRoleAdmin {
 			logger.Info("Upgrading existing user to admin role", "player_id", player.ID)
-			if err := s.repo.UpdatePlayerRole(player.ID, PlayerRoleAdmin); err != nil {
+			if err := s.repo.UpdatePlayerRole(ctx, player.ID, PlayerRoleAdmin); err != nil {
 				logger.Error("Failed to upgrade user to admin", "error", err)
 				return nil, fmt.Errorf("failed to upgrade to admin: %w", err)
 			}
@@ -77,7 +78,7 @@ func (s *Service) FindOrCreatePlayerByOAuth(provider, providerUserID, email, dis
 		logger.Info("Creating new admin user via OAuth")
 	}
 
-	player, err = s.repo.CreatePlayer(username, email, displayName, avatarURL)
+	player, err = s.repo.CreatePlayer(ctx, username, email, displayName, avatarURL)
 	if err != nil {
 		logger.Error("Failed to create player", "error", err)
 		return nil, fmt.Errorf("failed to create player: %w", err)

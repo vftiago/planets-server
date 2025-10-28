@@ -1,6 +1,7 @@
 package planet
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -28,7 +29,7 @@ func (r *Repository) getExecutor(tx *database.Tx) database.Executor {
 	return r.db
 }
 
-func (r *Repository) CreatePlanet(systemID, planetIndex int, name string, planetType PlanetType, size int, maxPopulation int64, tx *database.Tx) (*Planet, error) {
+func (r *Repository) CreatePlanet(ctx context.Context, systemID, planetIndex int, name string, planetType PlanetType, size int, maxPopulation int64, tx *database.Tx) (*Planet, error) {
 	exec := r.getExecutor(tx)
 
 	logger := r.logger.With(
@@ -47,7 +48,7 @@ func (r *Repository) CreatePlanet(systemID, planetIndex int, name string, planet
 	`
 
 	var planet Planet
-	err := exec.QueryRow(query, systemID, planetIndex, name, planetType, size, maxPopulation).Scan(
+	err := exec.QueryRowContext(ctx, query, systemID, planetIndex, name, planetType, size, maxPopulation).Scan(
 		&planet.ID,
 		&planet.SystemID,
 		&planet.PlanetIndex,
@@ -70,7 +71,7 @@ func (r *Repository) CreatePlanet(systemID, planetIndex int, name string, planet
 	return &planet, nil
 }
 
-func (r *Repository) GetPlanetsBySystemID(systemID int) ([]Planet, error) {
+func (r *Repository) GetPlanetsBySystemID(ctx context.Context, systemID int) ([]Planet, error) {
 	logger := slog.With("component", "planet_repository", "operation", "get_planets_by_system", "system_id", systemID)
 	logger.Debug("Getting planets by system ID")
 
@@ -81,7 +82,7 @@ func (r *Repository) GetPlanetsBySystemID(systemID int) ([]Planet, error) {
 		ORDER BY planet_index
 	`
 
-	rows, err := r.db.Query(query, systemID)
+	rows, err := r.db.QueryContext(ctx, query, systemID)
 	if err != nil {
 		logger.Error("Failed to query planets", "error", err)
 		return nil, fmt.Errorf("failed to query planets: %w", err)
@@ -135,7 +136,7 @@ type BatchInsertRequest struct {
 }
 
 // CreatePlanetsBatch creates multiple planets in a single database operation using JSON
-func (r *Repository) CreatePlanetsBatch(planets []BatchInsertRequest, tx *database.Tx) ([]Planet, error) {
+func (r *Repository) CreatePlanetsBatch(ctx context.Context, planets []BatchInsertRequest, tx *database.Tx) ([]Planet, error) {
 	if len(planets) == 0 {
 		return []Planet{}, nil
 	}
@@ -171,7 +172,7 @@ func (r *Repository) CreatePlanetsBatch(planets []BatchInsertRequest, tx *databa
 		FROM json_array_elements($1::json) AS data
 		RETURNING id, system_id, planet_index, name, type, size, population, max_population, owner_id, created_at, updated_at`
 
-	rows, err := exec.Query(query, string(planetsJSON))
+	rows, err := exec.QueryContext(ctx, query, string(planetsJSON))
 	if err != nil {
 		logger.Error("Failed to batch create planets", "error", err)
 		return nil, fmt.Errorf("failed to batch create planets: %w", err)

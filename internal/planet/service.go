@@ -1,6 +1,7 @@
 package planet
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"math/rand"
@@ -22,7 +23,7 @@ func NewService(repo *Repository, logger *slog.Logger) *Service {
 }
 
 // GeneratePlanets creates planets in a system according to the provided configuration
-func (s *Service) GeneratePlanets(systemID int, minPlanets, maxPlanets int, tx *database.Tx) (int, error) {
+func (s *Service) GeneratePlanets(ctx context.Context, systemID int, minPlanets, maxPlanets int, tx *database.Tx) (int, error) {
 	logger := s.logger.With("component", "planet_service", "operation", "generate_planets", "system_id", systemID, "min_planets", minPlanets, "max_planets", maxPlanets)
 	logger.Debug("Generating planets")
 
@@ -30,9 +31,15 @@ func (s *Service) GeneratePlanets(systemID int, minPlanets, maxPlanets int, tx *
 	planetNames := s.generatePlanetNames()
 
 	for i := 0; i < planetCount; i++ {
+		// Check for context cancellation
+		if err := ctx.Err(); err != nil {
+			logger.Warn("Context cancelled during planet generation", "error", err)
+			return 0, fmt.Errorf("planet generation cancelled: %w", err)
+		}
+
 		planetName := fmt.Sprintf("Planet %s", planetNames[i%len(planetNames)])
 
-		_, err := s.repo.CreatePlanet(systemID, i, planetName, s.generateRandomPlanetType(), 50+rand.Intn(151), int64(100000+rand.Intn(900000)), tx)
+		_, err := s.repo.CreatePlanet(ctx, systemID, i, planetName, s.generateRandomPlanetType(), 50+rand.Intn(151), int64(100000+rand.Intn(900000)), tx)
 		if err != nil {
 			logger.Error("Failed to create planet", "error", err, "planet_name", planetName)
 			return 0, fmt.Errorf("failed to create planet: %w", err)
@@ -81,7 +88,7 @@ func (s *Service) generateRandomPlanetType() PlanetType {
 }
 
 // GeneratePlanetsForSystems generates planets for multiple systems in a single batch operation
-func (s *Service) GeneratePlanetsForSystems(systemIDs []int, minPlanets, maxPlanets int, tx *database.Tx) (int, error) {
+func (s *Service) GeneratePlanetsForSystems(ctx context.Context, systemIDs []int, minPlanets, maxPlanets int, tx *database.Tx) (int, error) {
 	logger := s.logger.With(
 		"component", "planet_service",
 		"operation", "generate_planets_for_systems",
@@ -100,6 +107,12 @@ func (s *Service) GeneratePlanetsForSystems(systemIDs []int, minPlanets, maxPlan
 
 	// Prepare all planets for all systems upfront
 	for _, systemID := range systemIDs {
+		// Check for context cancellation
+		if err := ctx.Err(); err != nil {
+			logger.Warn("Context cancelled during planet generation for systems", "error", err)
+			return 0, fmt.Errorf("planet generation cancelled: %w", err)
+		}
+
 		planetCount := minPlanets + rand.Intn(maxPlanets-minPlanets+1)
 
 		for i := 0; i < planetCount; i++ {
@@ -122,7 +135,7 @@ func (s *Service) GeneratePlanetsForSystems(systemIDs []int, minPlanets, maxPlan
 		return 0, nil
 	}
 
-	planets, err := s.repo.CreatePlanetsBatch(batchRequests, tx)
+	planets, err := s.repo.CreatePlanetsBatch(ctx, batchRequests, tx)
 	if err != nil {
 		logger.Error("Failed to batch create planets", "error", err)
 		return 0, fmt.Errorf("failed to batch create planets: %w", err)

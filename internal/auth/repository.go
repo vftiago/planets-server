@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log/slog"
@@ -17,7 +18,7 @@ func NewRepository(db *database.DB) *Repository {
 	return &Repository{db: db}
 }
 
-func (r *Repository) CreateAuthProvider(playerID int, provider, providerUserID, providerEmail string) error {
+func (r *Repository) CreateAuthProvider(ctx context.Context, playerID int, provider, providerUserID, providerEmail string) error {
 	logger := slog.With(
 		"component", "auth_repository",
 		"operation", "create_auth_provider",
@@ -31,7 +32,7 @@ func (r *Repository) CreateAuthProvider(playerID int, provider, providerUserID, 
 		VALUES ($1, $2, $3, $4)
 	`
 
-	_, err := r.db.Exec(query, playerID, provider, providerUserID, providerEmail)
+	_, err := r.db.ExecContext(ctx, query, playerID, provider, providerUserID, providerEmail)
 	if err != nil {
 		logger.Error("Failed to create auth provider", "error", err)
 		return fmt.Errorf("failed to create auth provider: %w", err)
@@ -41,7 +42,7 @@ func (r *Repository) CreateAuthProvider(playerID int, provider, providerUserID, 
 	return nil
 }
 
-func (r *Repository) FindPlayerByAuthProvider(provider, providerUserID string) (int, error) {
+func (r *Repository) FindPlayerByAuthProvider(ctx context.Context, provider, providerUserID string) (int, error) {
 	logger := slog.With(
 		"component", "auth_repository",
 		"operation", "find_player_by_auth",
@@ -56,7 +57,7 @@ func (r *Repository) FindPlayerByAuthProvider(provider, providerUserID string) (
 	`
 
 	var playerID int
-	err := r.db.QueryRow(query, provider, providerUserID).Scan(&playerID)
+	err := r.db.QueryRowContext(ctx, query, provider, providerUserID).Scan(&playerID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			logger.Debug("No player found for auth provider")

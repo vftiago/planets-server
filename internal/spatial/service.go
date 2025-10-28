@@ -1,6 +1,7 @@
 package spatial
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"math"
@@ -19,28 +20,28 @@ func NewService(repo *Repository, logger *slog.Logger) *Service {
 	}
 }
 
-func (s *Service) GetEntitiesByParent(parentID int, entityType EntityType) ([]SpatialEntity, error) {
-	return s.repo.GetEntitiesByParent(parentID, entityType)
+func (s *Service) GetEntitiesByParent(ctx context.Context, parentID int, entityType EntityType) ([]SpatialEntity, error) {
+	return s.repo.GetEntitiesByParent(ctx, parentID, entityType)
 }
 
-func (s *Service) CreateEntity(gameID, parentID int, entityType EntityType, x, y int, name string, tx *database.Tx) (*SpatialEntity, error) {
+func (s *Service) CreateEntity(ctx context.Context, gameID, parentID int, entityType EntityType, x, y int, name string, tx *database.Tx) (*SpatialEntity, error) {
 	level := EntityLevels[entityType]
-	return s.repo.CreateEntity(gameID, parentID, entityType, level, x, y, name, "", tx)
+	return s.repo.CreateEntity(ctx, gameID, parentID, entityType, level, x, y, name, "", tx)
 }
 
-func (s *Service) GetGalaxiesByGame(gameID int) ([]SpatialEntity, error) {
-	return s.GetEntitiesByParent(gameID, EntityTypeGalaxy)
+func (s *Service) GetGalaxiesByGame(ctx context.Context, gameID int) ([]SpatialEntity, error) {
+	return s.GetEntitiesByParent(ctx, gameID, EntityTypeGalaxy)
 }
 
-func (s *Service) GetSectorsByGalaxy(galaxyID int) ([]SpatialEntity, error) {
-	return s.GetEntitiesByParent(galaxyID, EntityTypeSector)
+func (s *Service) GetSectorsByGalaxy(ctx context.Context, galaxyID int) ([]SpatialEntity, error) {
+	return s.GetEntitiesByParent(ctx, galaxyID, EntityTypeSector)
 }
 
-func (s *Service) GetSystemsBySector(sectorID int) ([]SpatialEntity, error) {
-	return s.GetEntitiesByParent(sectorID, EntityTypeSystem)
+func (s *Service) GetSystemsBySector(ctx context.Context, sectorID int) ([]SpatialEntity, error) {
+	return s.GetEntitiesByParent(ctx, sectorID, EntityTypeSystem)
 }
 
-func (s *Service) GenerateEntities(gameID, parentID int, entityType EntityType, count int, tx *database.Tx) ([]SpatialEntity, error) {
+func (s *Service) GenerateEntities(ctx context.Context, gameID, parentID int, entityType EntityType, count int, tx *database.Tx) ([]SpatialEntity, error) {
 	logger := s.logger.With(
 		"operation", "generate_entities",
 		"type", entityType,
@@ -63,6 +64,12 @@ func (s *Service) GenerateEntities(gameID, parentID int, entityType EntityType, 
 	var batchRequests []BatchInsertRequest
 
 	for x := 0; x < entitiesPerSide; x++ {
+		// Check for context cancellation
+		if err := ctx.Err(); err != nil {
+			logger.Warn("Context cancelled during entity generation", "error", err)
+			return nil, fmt.Errorf("entity generation cancelled: %w", err)
+		}
+
 		for y := 0; y < entitiesPerSide; y++ {
 			if len(batchRequests) >= count {
 				break
@@ -88,7 +95,7 @@ func (s *Service) GenerateEntities(gameID, parentID int, entityType EntityType, 
 	}
 
 	// Perform batch insert
-	entities, err := s.repo.CreateEntitiesBatch(batchRequests, tx)
+	entities, err := s.repo.CreateEntitiesBatch(ctx, batchRequests, tx)
 	if err != nil {
 		logger.Error("Failed to batch create entities", "error", err)
 		return nil, fmt.Errorf("failed to batch create %s: %w", entityType, err)
@@ -99,7 +106,7 @@ func (s *Service) GenerateEntities(gameID, parentID int, entityType EntityType, 
 }
 
 // GenerateEntitiesForMultipleParents generates entities for multiple parent entities in a single batch operation
-func (s *Service) GenerateEntitiesForMultipleParents(gameID int, parents []SpatialEntity, entityType EntityType, countPerParent int, tx *database.Tx) ([]SpatialEntity, error) {
+func (s *Service) GenerateEntitiesForMultipleParents(ctx context.Context, gameID int, parents []SpatialEntity, entityType EntityType, countPerParent int, tx *database.Tx) ([]SpatialEntity, error) {
 	logger := s.logger.With(
 		"operation", "generate_entities_for_multiple_parents",
 		"type", entityType,
@@ -125,6 +132,12 @@ func (s *Service) GenerateEntitiesForMultipleParents(gameID int, parents []Spati
 	var batchRequests []BatchInsertRequest
 
 	for _, parent := range parents {
+		// Check for context cancellation
+		if err := ctx.Err(); err != nil {
+			logger.Warn("Context cancelled during entity generation for multiple parents", "error", err)
+			return nil, fmt.Errorf("entity generation cancelled: %w", err)
+		}
+
 		nameIndex := 0
 		entityCount := 0
 
@@ -157,7 +170,7 @@ func (s *Service) GenerateEntitiesForMultipleParents(gameID int, parents []Spati
 	}
 
 	// Perform single batch insert for all entities across all parents
-	entities, err := s.repo.CreateEntitiesBatch(batchRequests, tx)
+	entities, err := s.repo.CreateEntitiesBatch(ctx, batchRequests, tx)
 	if err != nil {
 		logger.Error("Failed to batch create entities for multiple parents", "error", err)
 		return nil, fmt.Errorf("failed to batch create %s for multiple parents: %w", entityType, err)

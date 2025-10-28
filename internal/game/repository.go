@@ -1,6 +1,7 @@
 package game
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log/slog"
@@ -29,7 +30,7 @@ func (r *Repository) getExecutor(tx *database.Tx) database.Executor {
 	return r.db
 }
 
-func (r *Repository) CreateGame(config GameConfig, tx *database.Tx) (*Game, error) {
+func (r *Repository) CreateGame(ctx context.Context, config GameConfig, tx *database.Tx) (*Game, error) {
 	exec := r.getExecutor(tx)
 
 	logger := r.logger.With(
@@ -47,7 +48,7 @@ func (r *Repository) CreateGame(config GameConfig, tx *database.Tx) (*Game, erro
 	`
 
 	var game Game
-	err := exec.QueryRow(query, config.Name, config.Description, config.UniverseName, config.UniverseDescription, config.MaxPlayers, config.TurnIntervalHours).Scan(
+	err := exec.QueryRowContext(ctx, query, config.Name, config.Description, config.UniverseName, config.UniverseDescription, config.MaxPlayers, config.TurnIntervalHours).Scan(
 		&game.ID,
 		&game.Name,
 		&game.Description,
@@ -72,7 +73,7 @@ func (r *Repository) CreateGame(config GameConfig, tx *database.Tx) (*Game, erro
 	return &game, nil
 }
 
-func (r *Repository) GetGameByID(gameID int) (*Game, error) {
+func (r *Repository) GetGameByID(ctx context.Context, gameID int) (*Game, error) {
 	logger := slog.With("component", "game_repository", "operation", "get_game", "game_id", gameID)
 	logger.Debug("Getting game by ID")
 
@@ -83,7 +84,7 @@ func (r *Repository) GetGameByID(gameID int) (*Game, error) {
 	`
 
 	var game Game
-	err := r.db.QueryRow(query, gameID).Scan(
+	err := r.db.QueryRowContext(ctx, query, gameID).Scan(
 		&game.ID,
 		&game.Name,
 		&game.Description,
@@ -112,7 +113,7 @@ func (r *Repository) GetGameByID(gameID int) (*Game, error) {
 	return &game, nil
 }
 
-func (r *Repository) GetAllGames() ([]Game, error) {
+func (r *Repository) GetAllGames(ctx context.Context) ([]Game, error) {
 	logger := slog.With("component", "game_repository", "operation", "get_all_games")
 	logger.Debug("Getting all games")
 
@@ -122,7 +123,7 @@ func (r *Repository) GetAllGames() ([]Game, error) {
 		ORDER BY created_at DESC
 	`
 
-	rows, err := r.db.Query(query)
+	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
 		logger.Error("Failed to query games", "error", err)
 		return nil, fmt.Errorf("failed to query games: %w", err)
@@ -167,12 +168,12 @@ func (r *Repository) GetAllGames() ([]Game, error) {
 	return games, nil
 }
 
-func (r *Repository) UpdateGameStatus(gameID int, status GameStatus) error {
+func (r *Repository) UpdateGameStatus(ctx context.Context, gameID int, status GameStatus) error {
 	logger := slog.With("component", "game_repository", "operation", "update_status", "game_id", gameID, "status", status)
 	logger.Debug("Updating game status")
 
 	query := `UPDATE games SET status = $1 WHERE id = $2`
-	result, err := r.db.Exec(query, status, gameID)
+	result, err := r.db.ExecContext(ctx, query, status, gameID)
 	if err != nil {
 		logger.Error("Failed to update game status", "error", err)
 		return fmt.Errorf("failed to update game status: %w", err)
@@ -193,7 +194,7 @@ func (r *Repository) UpdateGameStatus(gameID int, status GameStatus) error {
 	return nil
 }
 
-func (r *Repository) ActivateGame(gameID int, tx *database.Tx) error {
+func (r *Repository) ActivateGame(ctx context.Context, gameID int, tx *database.Tx) error {
 	exec := r.getExecutor(tx)
 
 	logger := slog.With("component", "game_repository", "operation", "activate_game", "game_id", gameID)
@@ -202,12 +203,12 @@ func (r *Repository) ActivateGame(gameID int, tx *database.Tx) error {
 	nextTurnAt := time.Now().Add(1 * time.Hour).Truncate(time.Hour)
 
 	query := `
-		UPDATE games 
+		UPDATE games
 		SET status = 'active', current_turn = 1, next_turn_at = $1
 		WHERE id = $2 AND status = 'creating'
 	`
 
-	result, err := exec.Exec(query, nextTurnAt, gameID)
+	result, err := exec.ExecContext(ctx, query, nextTurnAt, gameID)
 	if err != nil {
 		logger.Error("Failed to activate game", "error", err)
 		return fmt.Errorf("failed to activate game: %w", err)
@@ -228,12 +229,12 @@ func (r *Repository) ActivateGame(gameID int, tx *database.Tx) error {
 	return nil
 }
 
-func (r *Repository) GetGameStats(gameID int) (*GameStats, error) {
+func (r *Repository) GetGameStats(ctx context.Context, gameID int) (*GameStats, error) {
 	logger := slog.With("component", "game_repository", "operation", "get_game_stats", "game_id", gameID)
 	logger.Debug("Getting game statistics")
 
 	query := `
-		SELECT 
+		SELECT
 			g.id,
 			g.name,
 			g.status,
@@ -244,15 +245,15 @@ func (r *Repository) GetGameStats(gameID int) (*GameStats, error) {
 			g.planet_count
 		FROM games g
 		LEFT JOIN (
-			SELECT game_id, COUNT(*) as count 
-			FROM game_players 
+			SELECT game_id, COUNT(*) as count
+			FROM game_players
 			WHERE game_id = $1
 		) player_count ON g.id = player_count.game_id
 		WHERE g.id = $1
 	`
 
 	var stats GameStats
-	err := r.db.QueryRow(query, gameID).Scan(
+	err := r.db.QueryRowContext(ctx, query, gameID).Scan(
 		&stats.ID,
 		&stats.Name,
 		&stats.Status,
@@ -277,12 +278,12 @@ func (r *Repository) GetGameStats(gameID int) (*GameStats, error) {
 	return &stats, nil
 }
 
-func (r *Repository) DeleteGame(gameID int) error {
+func (r *Repository) DeleteGame(ctx context.Context, gameID int) error {
 	logger := slog.With("component", "game_repository", "operation", "delete_game", "game_id", gameID)
 	logger.Info("Deleting game and all related data")
 
 	query := `DELETE FROM games WHERE id = $1`
-	result, err := r.db.Exec(query, gameID)
+	result, err := r.db.ExecContext(ctx, query, gameID)
 	if err != nil {
 		logger.Error("Failed to delete game", "error", err)
 		return fmt.Errorf("failed to delete game: %w", err)
@@ -303,18 +304,18 @@ func (r *Repository) DeleteGame(gameID int) error {
 	return nil
 }
 
-func (r *Repository) UpdateGameCounts(gameID int, planetCount int, tx *database.Tx) error {
+func (r *Repository) UpdateGameCounts(ctx context.Context, gameID int, planetCount int, tx *database.Tx) error {
 	exec := r.getExecutor(tx)
 
 	logger := r.logger.With("component", "game_repository", "operation", "update_counts", "game_id", gameID)
 	logger.Debug("Updating game counts")
 
 	query := `
-		UPDATE games 
+		UPDATE games
 		SET planet_count = $2, updated_at = NOW()
 		WHERE id = $1`
 
-	result, err := exec.Exec(query, gameID, planetCount)
+	result, err := exec.ExecContext(ctx, query, gameID, planetCount)
 	if err != nil {
 		logger.Error("Failed to update game counts", "error", err)
 		return fmt.Errorf("failed to update game counts: %w", err)

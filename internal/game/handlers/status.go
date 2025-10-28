@@ -23,12 +23,13 @@ func NewGameStatusHandler(playerService *player.Service) *GameStatusHandler {
 }
 
 func (h *GameStatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	logger := slog.With("handler", "game_status", "remote_addr", r.RemoteAddr)
 	logger.Debug("Game status requested")
 
 	w.Header().Set("Content-Type", "application/json")
 
-	playerCount, err := h.playerService.GetPlayerCount()
+	playerCount, err := h.playerService.GetPlayerCount(ctx)
 	if err != nil {
 		logger.Warn("Failed to get player count", "error", err)
 		playerCount = 0

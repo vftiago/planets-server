@@ -107,8 +107,8 @@ func (h *GoogleAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 
 	logger.Info("OAuth state validation successful - proceeding with Google OAuth callback")
 
-	// Exchange code for token with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Exchange code for token with timeout - use request context as parent
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
 	token, err := h.provider.ExchangeCode(ctx, code)
@@ -148,7 +148,7 @@ func (h *GoogleAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 	userLogger.Info("Creating or finding player account for Google user")
 
 	// First check if auth provider exists
-	existingPlayerID, err := h.authService.FindPlayerByAuthProvider("google", userInfo.ID)
+	existingPlayerID, err := h.authService.FindPlayerByAuthProvider(ctx, "google", userInfo.ID)
 	if err != nil {
 		userLogger.Error("Failed to check auth provider", "error", err)
 		redirectWithError(w, r, "database_error", "Failed to authenticate user")
@@ -158,7 +158,7 @@ func (h *GoogleAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 	var player *player.Player
 	if existingPlayerID > 0 {
 		// Player exists via OAuth
-		player, err = h.playerService.GetPlayerByID(existingPlayerID)
+		player, err = h.playerService.GetPlayerByID(ctx, existingPlayerID)
 		if err != nil {
 			userLogger.Error("Failed to get existing player", "error", err)
 			redirectWithError(w, r, "database_error", "Failed to get user account")
@@ -167,6 +167,7 @@ func (h *GoogleAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 	} else {
 		// Find or create player
 		player, err = h.playerService.FindOrCreatePlayerByOAuth(
+			ctx,
 			"google",
 			userInfo.ID,
 			userInfo.Email,
@@ -180,7 +181,7 @@ func (h *GoogleAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 		}
 
 		// Link auth provider
-		err = h.authService.CreateAuthProvider(player.ID, "google", userInfo.ID, userInfo.Email)
+		err = h.authService.CreateAuthProvider(ctx, player.ID, "google", userInfo.ID, userInfo.Email)
 		if err != nil {
 			userLogger.Error("Failed to create auth provider", "error", err)
 			redirectWithError(w, r, "database_error", "Failed to link account")

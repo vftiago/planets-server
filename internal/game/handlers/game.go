@@ -18,6 +18,7 @@ func NewGameHandler(service *game.Service) *GameHandler {
 }
 
 func (h *GameHandler) CreateGame(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	logger := slog.With("handler", "create_game", "remote_addr", r.RemoteAddr)
 	logger.Debug("Game creation requested")
 
@@ -80,7 +81,7 @@ func (h *GameHandler) CreateGame(w http.ResponseWriter, r *http.Request) {
 		"sectors_per_galaxy", request.Universe.SectorsPerGalaxy,
 		"systems_per_sector", request.Universe.SystemsPerSector)
 
-	createdGame, err := h.service.CreateGame(request.Game, request.Universe)
+	createdGame, err := h.service.CreateGame(ctx, request.Game, request.Universe)
 	if err != nil {
 		logger.Error("Failed to create game", "error", err)
 		http.Error(w, "Failed to create game", http.StatusInternalServerError)
@@ -104,6 +105,7 @@ func (h *GameHandler) CreateGame(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *GameHandler) GetGames(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	logger := slog.With("handler", "get_games", "remote_addr", r.RemoteAddr)
 	logger.Debug("Games list requested")
 
@@ -113,7 +115,7 @@ func (h *GameHandler) GetGames(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	games, err := h.service.GetAllGames()
+	games, err := h.service.GetAllGames(ctx)
 	if err != nil {
 		logger.Error("Failed to get games", "error", err)
 		http.Error(w, "Failed to get games", http.StatusInternalServerError)
@@ -136,6 +138,7 @@ func (h *GameHandler) GetGames(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *GameHandler) GetGameStats(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	logger := slog.With("handler", "get_game_stats", "remote_addr", r.RemoteAddr)
 	logger.Debug("Game stats requested")
 
@@ -159,7 +162,7 @@ func (h *GameHandler) GetGameStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stats, err := h.service.GetGameStats(gameID)
+	stats, err := h.service.GetGameStats(ctx, gameID)
 	if err != nil {
 		logger.Error("Failed to get game stats", "error", err, "game_id", gameID)
 		http.Error(w, "Failed to get game stats", http.StatusInternalServerError)

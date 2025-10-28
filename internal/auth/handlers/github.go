@@ -109,7 +109,7 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 	logger.Info("OAuth state validation successful - proceeding with GitHub OAuth callback")
 
 	// Exchange code for token with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
 	token, err := h.provider.ExchangeCode(ctx, code)
@@ -151,7 +151,7 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 	githubUserID := strconv.Itoa(userInfo.ID)
 
 	// First check if auth provider exists
-	existingPlayerID, err := h.authService.FindPlayerByAuthProvider("github", githubUserID)
+	existingPlayerID, err := h.authService.FindPlayerByAuthProvider(ctx, "github", githubUserID)
 	if err != nil {
 		userLogger.Error("Failed to check auth provider", "error", err)
 		redirectWithError(w, r, "database_error", "Failed to authenticate user")
@@ -161,7 +161,7 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 	var player *player.Player
 	if existingPlayerID > 0 {
 		// Player exists via OAuth
-		player, err = h.playerService.GetPlayerByID(existingPlayerID)
+		player, err = h.playerService.GetPlayerByID(ctx, existingPlayerID)
 		if err != nil {
 			userLogger.Error("Failed to get existing player", "error", err)
 			redirectWithError(w, r, "database_error", "Failed to get user account")
@@ -170,6 +170,7 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 	} else {
 		// Find or create player
 		player, err = h.playerService.FindOrCreatePlayerByOAuth(
+			ctx,
 			"github",
 			githubUserID,
 			userInfo.Email,
@@ -183,7 +184,7 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 		}
 
 		// Link auth provider
-		err = h.authService.CreateAuthProvider(player.ID, "github", githubUserID, userInfo.Email)
+		err = h.authService.CreateAuthProvider(ctx, player.ID, "github", githubUserID, userInfo.Email)
 		if err != nil {
 			userLogger.Error("Failed to create auth provider", "error", err)
 			redirectWithError(w, r, "database_error", "Failed to link account")

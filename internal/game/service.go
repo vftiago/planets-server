@@ -1,6 +1,7 @@
 package game
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 
@@ -31,17 +32,17 @@ func NewService(
 }
 
 // CreateGame creates a new game with an integrated universe
-func (s *Service) CreateGame(config GameConfig, universeConfig UniverseConfig) (*Game, error) {
+func (s *Service) CreateGame(ctx context.Context, config GameConfig, universeConfig UniverseConfig) (*Game, error) {
 	logger := s.logger.With("component", "game_service", "operation", "create_game", "name", config.Name)
 	logger.Info("Creating new game with transaction")
 
-	if err := s.deleteExistingGames(); err != nil {
+	if err := s.deleteExistingGames(ctx); err != nil {
 		logger.Error("Failed to delete existing games", "error", err)
 		return nil, fmt.Errorf("failed to delete existing games: %w", err)
 	}
 
 	// BEGIN TRANSACTION
-	tx, err := s.gameRepo.db.BeginTx()
+	tx, err := s.gameRepo.db.BeginTxContext(ctx)
 	if err != nil {
 		logger.Error("Failed to begin transaction", "error", err)
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -57,7 +58,7 @@ func (s *Service) CreateGame(config GameConfig, universeConfig UniverseConfig) (
 	}()
 
 	// Create the game within transaction
-	game, err := s.gameRepo.CreateGame(config, tx)
+	game, err := s.gameRepo.CreateGame(ctx, config, tx)
 	if err != nil {
 		logger.Error("Failed to create game", "error", err)
 		return nil, fmt.Errorf("failed to create game: %w", err)
@@ -66,14 +67,14 @@ func (s *Service) CreateGame(config GameConfig, universeConfig UniverseConfig) (
 	logger.Info("Game created successfully", "game_id", game.ID)
 
 	// Generate the universe content within transaction
-	err = s.generateUniverse(game.ID, universeConfig, tx)
+	err = s.generateUniverse(ctx, game.ID, universeConfig, tx)
 	if err != nil {
 		logger.Error("Failed to generate universe", "game_id", game.ID, "error", err)
 		return nil, fmt.Errorf("failed to generate universe: %w", err)
 	}
 
 	// Activate the game within transaction
-	if err := s.gameRepo.ActivateGame(game.ID, tx); err != nil {
+	if err := s.gameRepo.ActivateGame(ctx, game.ID, tx); err != nil {
 		logger.Error("Failed to activate game", "error", err)
 		return nil, fmt.Errorf("failed to activate game: %w", err)
 	}
@@ -87,7 +88,7 @@ func (s *Service) CreateGame(config GameConfig, universeConfig UniverseConfig) (
 	logger.Info("Transaction committed successfully")
 
 	// Reload the game with updated counts and status (no transaction needed)
-	updatedGame, err := s.gameRepo.GetGameByID(game.ID)
+	updatedGame, err := s.gameRepo.GetGameByID(ctx, game.ID)
 	if err != nil {
 		logger.Error("Failed to reload game", "error", err)
 		return nil, fmt.Errorf("failed to reload game: %w", err)
@@ -102,29 +103,29 @@ func (s *Service) CreateGame(config GameConfig, universeConfig UniverseConfig) (
 }
 
 // GetAllGames retrieves all games
-func (s *Service) GetAllGames() ([]Game, error) {
-	return s.gameRepo.GetAllGames()
+func (s *Service) GetAllGames(ctx context.Context) ([]Game, error) {
+	return s.gameRepo.GetAllGames(ctx)
 }
 
 // GetGameStats retrieves game statistics
-func (s *Service) GetGameStats(gameID int) (*GameStats, error) {
-	return s.gameRepo.GetGameStats(gameID)
+func (s *Service) GetGameStats(ctx context.Context, gameID int) (*GameStats, error) {
+	return s.gameRepo.GetGameStats(ctx, gameID)
 }
 
 // DeleteGame deletes a game and all related data
-func (s *Service) DeleteGame(gameID int) error {
+func (s *Service) DeleteGame(ctx context.Context, gameID int) error {
 	logger := s.logger.With("component", "game_service", "operation", "delete_game", "game_id", gameID)
 	logger.Info("Deleting game and all related data")
 
-	return s.gameRepo.DeleteGame(gameID)
+	return s.gameRepo.DeleteGame(ctx, gameID)
 }
 
 // deleteExistingGames deletes all existing games to maintain single game design
-func (s *Service) deleteExistingGames() error {
+func (s *Service) deleteExistingGames(ctx context.Context) error {
 	logger := s.logger.With("component", "game_service", "operation", "delete_existing_games")
 	logger.Info("Deleting all existing games to maintain single universe")
 
-	existingGames, err := s.gameRepo.GetAllGames()
+	existingGames, err := s.gameRepo.GetAllGames(ctx)
 	if err != nil {
 		logger.Error("Failed to get existing games", "error", err)
 		return fmt.Errorf("failed to get existing games: %w", err)
@@ -138,7 +139,13 @@ func (s *Service) deleteExistingGames() error {
 	logger.Info("Found existing games to delete", "count", len(existingGames))
 
 	for _, game := range existingGames {
-		if err := s.gameRepo.DeleteGame(game.ID); err != nil {
+		// Check for context cancellation
+		if err := ctx.Err(); err != nil {
+			logger.Warn("Context cancelled during game deletion", "error", err)
+			return fmt.Errorf("game deletion cancelled: %w", err)
+		}
+
+		if err := s.gameRepo.DeleteGame(ctx, game.ID); err != nil {
 			logger.Error("Failed to delete existing game", "error", err, "game_id", game.ID)
 			return fmt.Errorf("failed to delete existing game %d: %w", game.ID, err)
 		}
@@ -150,23 +157,23 @@ func (s *Service) deleteExistingGames() error {
 }
 
 // generateUniverse orchestrates the generation of universe content for the game
-func (s *Service) generateUniverse(gameID int, config UniverseConfig, tx *database.Tx) error {
+func (s *Service) generateUniverse(ctx context.Context, gameID int, config UniverseConfig, tx *database.Tx) error {
 	s.logger.Info("Starting universe generation", "game_id", gameID)
 
 	// Level 1: Generate all galaxies in one batch
-	galaxies, err := s.spatialService.GenerateEntities(gameID, gameID, spatial.EntityTypeGalaxy, config.GalaxyCount, tx)
+	galaxies, err := s.spatialService.GenerateEntities(ctx, gameID, gameID, spatial.EntityTypeGalaxy, config.GalaxyCount, tx)
 	if err != nil {
 		return fmt.Errorf("failed to generate galaxies: %w", err)
 	}
 
 	// Level 2: Generate all sectors for all galaxies in one batch
-	sectors, err := s.generateSectorsForGalaxies(gameID, galaxies, config.SectorsPerGalaxy, tx)
+	sectors, err := s.generateSectorsForGalaxies(ctx, gameID, galaxies, config.SectorsPerGalaxy, tx)
 	if err != nil {
 		return fmt.Errorf("failed to generate sectors: %w", err)
 	}
 
 	// Level 3: Generate all systems for all sectors in one batch
-	systems, err := s.generateSystemsForSectors(gameID, sectors, config.SystemsPerSector, tx)
+	systems, err := s.generateSystemsForSectors(ctx, gameID, sectors, config.SystemsPerSector, tx)
 	if err != nil {
 		return fmt.Errorf("failed to generate systems: %w", err)
 	}
@@ -177,13 +184,13 @@ func (s *Service) generateUniverse(gameID int, config UniverseConfig, tx *databa
 		systemIDs[i] = system.ID
 	}
 
-	totalPlanets, err := s.planetService.GeneratePlanetsForSystems(systemIDs, config.MinPlanetsPerSystem, config.MaxPlanetsPerSystem, tx)
+	totalPlanets, err := s.planetService.GeneratePlanetsForSystems(ctx, systemIDs, config.MinPlanetsPerSystem, config.MaxPlanetsPerSystem, tx)
 	if err != nil {
 		return fmt.Errorf("failed to generate planets: %w", err)
 	}
 
 	// Update the game with final counts
-	err = s.gameRepo.UpdateGameCounts(gameID, totalPlanets, tx)
+	err = s.gameRepo.UpdateGameCounts(ctx, gameID, totalPlanets, tx)
 	if err != nil {
 		return fmt.Errorf("failed to update game counts: %w", err)
 	}
@@ -199,7 +206,7 @@ func (s *Service) generateUniverse(gameID int, config UniverseConfig, tx *databa
 }
 
 // generateSectorsForGalaxies generates all sectors for multiple galaxies in a single batch operation
-func (s *Service) generateSectorsForGalaxies(gameID int, galaxies []spatial.SpatialEntity, sectorsPerGalaxy int, tx *database.Tx) ([]spatial.SpatialEntity, error) {
+func (s *Service) generateSectorsForGalaxies(ctx context.Context, gameID int, galaxies []spatial.SpatialEntity, sectorsPerGalaxy int, tx *database.Tx) ([]spatial.SpatialEntity, error) {
 	if len(galaxies) == 0 {
 		return []spatial.SpatialEntity{}, nil
 	}
@@ -207,7 +214,7 @@ func (s *Service) generateSectorsForGalaxies(gameID int, galaxies []spatial.Spat
 	s.logger.Info("Generating sectors for all galaxies in single batch", "galaxy_count", len(galaxies), "sectors_per_galaxy", sectorsPerGalaxy)
 
 	// Generate ALL sectors for ALL galaxies in a single batch insert
-	sectors, err := s.spatialService.GenerateEntitiesForMultipleParents(gameID, galaxies, spatial.EntityTypeSector, sectorsPerGalaxy, tx)
+	sectors, err := s.spatialService.GenerateEntitiesForMultipleParents(ctx, gameID, galaxies, spatial.EntityTypeSector, sectorsPerGalaxy, tx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to batch generate sectors: %w", err)
 	}
@@ -216,7 +223,7 @@ func (s *Service) generateSectorsForGalaxies(gameID int, galaxies []spatial.Spat
 }
 
 // generateSystemsForSectors generates all systems for multiple sectors in a single batch operation
-func (s *Service) generateSystemsForSectors(gameID int, sectors []spatial.SpatialEntity, systemsPerSector int, tx *database.Tx) ([]spatial.SpatialEntity, error) {
+func (s *Service) generateSystemsForSectors(ctx context.Context, gameID int, sectors []spatial.SpatialEntity, systemsPerSector int, tx *database.Tx) ([]spatial.SpatialEntity, error) {
 	if len(sectors) == 0 {
 		return []spatial.SpatialEntity{}, nil
 	}
@@ -224,7 +231,7 @@ func (s *Service) generateSystemsForSectors(gameID int, sectors []spatial.Spatia
 	s.logger.Info("Generating systems for all sectors in single batch", "sector_count", len(sectors), "systems_per_sector", systemsPerSector)
 
 	// Generate ALL systems for ALL sectors in a single batch insert
-	systems, err := s.spatialService.GenerateEntitiesForMultipleParents(gameID, sectors, spatial.EntityTypeSystem, systemsPerSector, tx)
+	systems, err := s.spatialService.GenerateEntitiesForMultipleParents(ctx, gameID, sectors, spatial.EntityTypeSystem, systemsPerSector, tx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to batch generate systems: %w", err)
 	}

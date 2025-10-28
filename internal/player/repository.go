@@ -1,6 +1,7 @@
 package player
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log/slog"
@@ -18,12 +19,12 @@ func NewRepository(db *database.DB) *Repository {
 	return &Repository{db: db}
 }
 
-func (r *Repository) GetPlayerCount() (int, error) {
+func (r *Repository) GetPlayerCount(ctx context.Context) (int, error) {
 	logger := slog.With("component", "player_repository", "operation", "get_count")
 	logger.Debug("Getting total player count")
 
 	var count int
-	err := r.db.QueryRow("SELECT COUNT(*) FROM players").Scan(&count)
+	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM players").Scan(&count)
 	if err != nil {
 		logger.Error("Failed to get player count", "error", err)
 		return 0, fmt.Errorf("failed to get player count: %w", err)
@@ -33,7 +34,7 @@ func (r *Repository) GetPlayerCount() (int, error) {
 	return count, nil
 }
 
-func (r *Repository) GetAllPlayers() ([]Player, error) {
+func (r *Repository) GetAllPlayers(ctx context.Context) ([]Player, error) {
 	logger := slog.With("component", "player_repository", "operation", "get_all")
 	logger.Debug("Retrieving all players")
 
@@ -43,7 +44,7 @@ func (r *Repository) GetAllPlayers() ([]Player, error) {
 		ORDER BY created_at DESC
 	`
 
-	rows, err := r.db.Query(query)
+	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
 		logger.Error("Failed to query players", "error", err)
 		return nil, fmt.Errorf("failed to query players: %w", err)
@@ -85,7 +86,7 @@ func (r *Repository) GetAllPlayers() ([]Player, error) {
 	return players, nil
 }
 
-func (r *Repository) CreatePlayer(username, email, displayName string, avatarURL *string) (*Player, error) {
+func (r *Repository) CreatePlayer(ctx context.Context, username, email, displayName string, avatarURL *string) (*Player, error) {
 	logger := slog.With(
 		"component", "player_repository",
 		"operation", "create",
@@ -107,7 +108,7 @@ func (r *Repository) CreatePlayer(username, email, displayName string, avatarURL
 
 	var player Player
 	var roleStr string
-	err := r.db.QueryRow(query, username, email, displayName, avatarURL, role.String()).Scan(
+	err := r.db.QueryRowContext(ctx, query, username, email, displayName, avatarURL, role.String()).Scan(
 		&player.ID,
 		&player.Username,
 		&player.Email,
@@ -140,7 +141,7 @@ func (r *Repository) determinePlayerRole(email string) PlayerRole {
 	return PlayerRoleUser
 }
 
-func (r *Repository) FindPlayerByEmail(email string) (*Player, error) {
+func (r *Repository) FindPlayerByEmail(ctx context.Context, email string) (*Player, error) {
 	logger := slog.With(
 		"component", "player_repository",
 		"operation", "find_by_email",
@@ -156,7 +157,7 @@ func (r *Repository) FindPlayerByEmail(email string) (*Player, error) {
 
 	var player Player
 	var roleStr string
-	err := r.db.QueryRow(query, email).Scan(
+	err := r.db.QueryRowContext(ctx, query, email).Scan(
 		&player.ID,
 		&player.Username,
 		&player.Email,
@@ -181,7 +182,7 @@ func (r *Repository) FindPlayerByEmail(email string) (*Player, error) {
 	return &player, nil
 }
 
-func (r *Repository) GetPlayerByID(id int) (*Player, error) {
+func (r *Repository) GetPlayerByID(ctx context.Context, id int) (*Player, error) {
 	logger := slog.With(
 		"component", "player_repository",
 		"operation", "get_by_id",
@@ -197,7 +198,7 @@ func (r *Repository) GetPlayerByID(id int) (*Player, error) {
 
 	var player Player
 	var roleStr string
-	err := r.db.QueryRow(query, id).Scan(
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&player.ID,
 		&player.Username,
 		&player.Email,
@@ -222,7 +223,7 @@ func (r *Repository) GetPlayerByID(id int) (*Player, error) {
 	return &player, nil
 }
 
-func (r *Repository) UpdatePlayerRole(playerID int, role PlayerRole) error {
+func (r *Repository) UpdatePlayerRole(ctx context.Context, playerID int, role PlayerRole) error {
 	logger := slog.With(
 		"component", "player_repository",
 		"operation", "update_role",
@@ -236,7 +237,7 @@ func (r *Repository) UpdatePlayerRole(playerID int, role PlayerRole) error {
 	}
 
 	query := `UPDATE players SET role = $1 WHERE id = $2`
-	result, err := r.db.Exec(query, role.String(), playerID)
+	result, err := r.db.ExecContext(ctx, query, role.String(), playerID)
 	if err != nil {
 		logger.Error("Failed to update player role", "error", err)
 		return fmt.Errorf("failed to update player role: %w", err)

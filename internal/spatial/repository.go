@@ -1,6 +1,7 @@
 package spatial
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -28,7 +29,7 @@ func (r *Repository) getExecutor(tx *database.Tx) database.Executor {
 	return r.db
 }
 
-func (r *Repository) GetEntitiesByParent(parentID int, entityType EntityType) ([]SpatialEntity, error) {
+func (r *Repository) GetEntitiesByParent(ctx context.Context, parentID int, entityType EntityType) ([]SpatialEntity, error) {
 	logger := r.logger.With(
 		"component", "spatial_repository",
 		"operation", "get_entities_by_parent",
@@ -38,13 +39,13 @@ func (r *Repository) GetEntitiesByParent(parentID int, entityType EntityType) ([
 	logger.Debug("Getting entities by parent")
 
 	query := `
-		SELECT id, game_id, parent_id, entity_type, level, x_coord, y_coord, 
+		SELECT id, game_id, parent_id, entity_type, level, x_coord, y_coord,
 		       name, description, child_count, created_at, updated_at
-		FROM spatial_entities 
+		FROM spatial_entities
 		WHERE parent_id = $1 AND entity_type = $2
 		ORDER BY x_coord, y_coord`
 
-	rows, err := r.db.Query(query, parentID, entityType)
+	rows, err := r.db.QueryContext(ctx, query, parentID, entityType)
 	if err != nil {
 		logger.Error("Failed to query spatial entities", "error", err)
 		return nil, fmt.Errorf("failed to query spatial entities: %w", err)
@@ -95,7 +96,7 @@ func (r *Repository) GetEntitiesByParent(parentID int, entityType EntityType) ([
 	return entities, nil
 }
 
-func (r *Repository) CreateEntity(gameID, parentID int, entityType EntityType, level int, x, y int, name, description string, tx *database.Tx) (*SpatialEntity, error) {
+func (r *Repository) CreateEntity(ctx context.Context, gameID, parentID int, entityType EntityType, level int, x, y int, name, description string, tx *database.Tx) (*SpatialEntity, error) {
 	exec := r.getExecutor(tx)
 
 	logger := r.logger.With(
@@ -117,7 +118,7 @@ func (r *Repository) CreateEntity(gameID, parentID int, entityType EntityType, l
 	var entity SpatialEntity
 	var descriptionVal sql.NullString
 
-	err := exec.QueryRow(query, gameID, parentID, entityType, level, x, y, name, description).Scan(
+	err := exec.QueryRowContext(ctx, query, gameID, parentID, entityType, level, x, y, name, description).Scan(
 		&entity.ID,
 		&entity.GameID,
 		&entity.ParentID,
@@ -158,7 +159,7 @@ type BatchInsertRequest struct {
 }
 
 // CreateEntitiesBatch creates multiple spatial entities in a single database operation using JSON
-func (r *Repository) CreateEntitiesBatch(entities []BatchInsertRequest, tx *database.Tx) ([]SpatialEntity, error) {
+func (r *Repository) CreateEntitiesBatch(ctx context.Context, entities []BatchInsertRequest, tx *database.Tx) ([]SpatialEntity, error) {
 	if len(entities) == 0 {
 		return []SpatialEntity{}, nil
 	}
@@ -194,7 +195,7 @@ func (r *Repository) CreateEntitiesBatch(entities []BatchInsertRequest, tx *data
 		FROM json_array_elements($1::json) AS data
 		RETURNING id, game_id, parent_id, entity_type, level, x_coord, y_coord, name, description, child_count, created_at, updated_at`
 
-	rows, err := exec.Query(query, string(entitiesJSON))
+	rows, err := exec.QueryContext(ctx, query, string(entitiesJSON))
 	if err != nil {
 		logger.Error("Failed to batch create spatial entities", "error", err)
 		return nil, fmt.Errorf("failed to batch create spatial entities: %w", err)

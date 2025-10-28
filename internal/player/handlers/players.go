@@ -16,12 +16,13 @@ func NewPlayersHandler(service *player.Service) *PlayersHandler {
 }
 
 func (h *PlayersHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	logger := slog.With("handler", "players", "remote_addr", r.RemoteAddr)
 	logger.Debug("Players list requested")
 
 	w.Header().Set("Content-Type", "application/json")
 
-	players, err := h.service.GetAllPlayers()
+	players, err := h.service.GetAllPlayers(ctx)
 	if err != nil {
 		logger.Error("Failed to fetch players", "error", err)
 		http.Error(w, "Failed to fetch players", http.StatusInternalServerError)
