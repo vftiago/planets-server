@@ -28,19 +28,6 @@ func Error(w http.ResponseWriter, r *http.Request, logger *slog.Logger, err erro
 	sendErrorResponse(w, errorType, err.Error(), statusCode)
 }
 
-// ErrorWithMessage logs an error and sends a JSON error response with a custom client message
-// Use this when you want to show a different message to the client than the internal error
-func ErrorWithMessage(w http.ResponseWriter, r *http.Request, logger *slog.Logger, err error, clientMessage string) {
-	errorType := errors.GetType(err)
-	statusCode := mapErrorTypeToStatusCode(errorType)
-
-	// Log the actual error with context
-	logError(logger, r, err, errorType, statusCode)
-
-	// Send JSON error response with custom message
-	sendErrorResponse(w, errorType, clientMessage, statusCode)
-}
-
 // mapErrorTypeToStatusCode maps error types to HTTP status codes
 func mapErrorTypeToStatusCode(errorType errors.ErrorType) int {
 	switch errorType {

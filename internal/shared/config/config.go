@@ -286,14 +286,6 @@ func (c *Config) validate() error {
 	return nil
 }
 
-func (c *Config) IsProduction() bool {
-	return c.Server.Environment == "production"
-}
-
-func (c *Config) IsDevelopment() bool {
-	return c.Server.Environment == "development"
-}
-
 func (c *Config) GoogleOAuthConfigured() bool {
 	return c.OAuth.Google.ClientID != "" && c.OAuth.Google.ClientSecret != ""
 }

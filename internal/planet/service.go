@@ -22,34 +22,6 @@ func NewService(repo *Repository, logger *slog.Logger) *Service {
 	}
 }
 
-// GeneratePlanets creates planets in a system according to the provided configuration
-func (s *Service) GeneratePlanets(ctx context.Context, systemID int, minPlanets, maxPlanets int, tx *database.Tx) (int, error) {
-	logger := s.logger.With("component", "planet_service", "operation", "generate_planets", "system_id", systemID, "min_planets", minPlanets, "max_planets", maxPlanets)
-	logger.Debug("Generating planets")
-
-	planetCount := minPlanets + rand.Intn(maxPlanets-minPlanets+1)
-	planetNames := s.generatePlanetNames()
-
-	for i := 0; i < planetCount; i++ {
-		// Check for context cancellation
-		if err := ctx.Err(); err != nil {
-			logger.Warn("Context cancelled during planet generation", "error", err)
-			return 0, fmt.Errorf("planet generation cancelled: %w", err)
-		}
-
-		planetName := fmt.Sprintf("Planet %s", planetNames[i%len(planetNames)])
-
-		_, err := s.repo.CreatePlanet(ctx, systemID, i, planetName, s.generateRandomPlanetType(), 50+rand.Intn(151), int64(100000+rand.Intn(900000)), tx)
-		if err != nil {
-			logger.Error("Failed to create planet", "error", err, "planet_name", planetName)
-			return 0, fmt.Errorf("failed to create planet: %w", err)
-		}
-	}
-
-	logger.Info("Planets generated", "count", planetCount)
-	return planetCount, nil
-}
-
 // generatePlanetNames returns a list of planet suffixes
 func (s *Service) generatePlanetNames() []string {
 	return []string{

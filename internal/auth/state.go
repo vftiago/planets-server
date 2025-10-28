@@ -151,17 +151,6 @@ func (sm *StateManager) cleanupExpiredStates() {
 	}
 }
 
-// GetStats returns statistics about the state manager (useful for monitoring)
-func (sm *StateManager) GetStats() map[string]interface{} {
-	sm.mutex.RLock()
-	defer sm.mutex.RUnlock()
-
-	return map[string]interface{}{
-		"active_states": len(sm.states),
-		"timestamp":     time.Now(),
-	}
-}
-
 // Helper functions to use the global state manager
 func GenerateOAuthState(provider, userAgent string) (string, error) {
 	return globalStateManager.GenerateState(provider, userAgent)

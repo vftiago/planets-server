@@ -43,28 +43,11 @@ func (e *AppError) Unwrap() error {
 	return e.Err
 }
 
-// NotFound creates a not found error
-func NotFound(message string) error {
-	return &AppError{
-		Type:    ErrorTypeNotFound,
-		Message: message,
-	}
-}
-
 // NotFoundf creates a not found error with formatting
 func NotFoundf(format string, args ...interface{}) error {
 	return &AppError{
 		Type:    ErrorTypeNotFound,
 		Message: fmt.Sprintf(format, args...),
-	}
-}
-
-// WrapNotFound wraps an error as a not found error
-func WrapNotFound(message string, err error) error {
-	return &AppError{
-		Type:    ErrorTypeNotFound,
-		Message: message,
-		Err:     err,
 	}
 }
 
@@ -93,93 +76,10 @@ func WrapValidation(message string, err error) error {
 	}
 }
 
-// Conflict creates a conflict error
-func Conflict(message string) error {
-	return &AppError{
-		Type:    ErrorTypeConflict,
-		Message: message,
-	}
-}
-
 // Conflictf creates a conflict error with formatting
 func Conflictf(format string, args ...interface{}) error {
 	return &AppError{
 		Type:    ErrorTypeConflict,
-		Message: fmt.Sprintf(format, args...),
-	}
-}
-
-// WrapConflict wraps an error as a conflict error
-func WrapConflict(message string, err error) error {
-	return &AppError{
-		Type:    ErrorTypeConflict,
-		Message: message,
-		Err:     err,
-	}
-}
-
-// Unauthorized creates an unauthorized error
-func Unauthorized(message string) error {
-	return &AppError{
-		Type:    ErrorTypeUnauthorized,
-		Message: message,
-	}
-}
-
-// Unauthorizedf creates an unauthorized error with formatting
-func Unauthorizedf(format string, args ...interface{}) error {
-	return &AppError{
-		Type:    ErrorTypeUnauthorized,
-		Message: fmt.Sprintf(format, args...),
-	}
-}
-
-// WrapUnauthorized wraps an error as an unauthorized error
-func WrapUnauthorized(message string, err error) error {
-	return &AppError{
-		Type:    ErrorTypeUnauthorized,
-		Message: message,
-		Err:     err,
-	}
-}
-
-// Forbidden creates a forbidden error
-func Forbidden(message string) error {
-	return &AppError{
-		Type:    ErrorTypeForbidden,
-		Message: message,
-	}
-}
-
-// Forbiddenf creates a forbidden error with formatting
-func Forbiddenf(format string, args ...interface{}) error {
-	return &AppError{
-		Type:    ErrorTypeForbidden,
-		Message: fmt.Sprintf(format, args...),
-	}
-}
-
-// WrapForbidden wraps an error as a forbidden error
-func WrapForbidden(message string, err error) error {
-	return &AppError{
-		Type:    ErrorTypeForbidden,
-		Message: message,
-		Err:     err,
-	}
-}
-
-// Internal creates an internal error
-func Internal(message string) error {
-	return &AppError{
-		Type:    ErrorTypeInternal,
-		Message: message,
-	}
-}
-
-// Internalf creates an internal error with formatting
-func Internalf(format string, args ...interface{}) error {
-	return &AppError{
-		Type:    ErrorTypeInternal,
 		Message: fmt.Sprintf(format, args...),
 	}
 }
@@ -193,31 +93,6 @@ func WrapInternal(message string, err error) error {
 	}
 }
 
-// External creates an external service error
-func External(message string) error {
-	return &AppError{
-		Type:    ErrorTypeExternal,
-		Message: message,
-	}
-}
-
-// Externalf creates an external service error with formatting
-func Externalf(format string, args ...interface{}) error {
-	return &AppError{
-		Type:    ErrorTypeExternal,
-		Message: fmt.Sprintf(format, args...),
-	}
-}
-
-// WrapExternal wraps an error as an external service error
-func WrapExternal(message string, err error) error {
-	return &AppError{
-		Type:    ErrorTypeExternal,
-		Message: message,
-		Err:     err,
-	}
-}
-
 // GetType returns the error type of an error
 func GetType(err error) ErrorType {
 	var appErr *AppError
@@ -225,39 +100,4 @@ func GetType(err error) ErrorType {
 		return appErr.Type
 	}
 	return ErrorTypeInternal
-}
-
-// IsNotFound checks if an error is a not found error
-func IsNotFound(err error) bool {
-	return GetType(err) == ErrorTypeNotFound
-}
-
-// IsValidation checks if an error is a validation error
-func IsValidation(err error) bool {
-	return GetType(err) == ErrorTypeValidation
-}
-
-// IsConflict checks if an error is a conflict error
-func IsConflict(err error) bool {
-	return GetType(err) == ErrorTypeConflict
-}
-
-// IsUnauthorized checks if an error is an unauthorized error
-func IsUnauthorized(err error) bool {
-	return GetType(err) == ErrorTypeUnauthorized
-}
-
-// IsForbidden checks if an error is a forbidden error
-func IsForbidden(err error) bool {
-	return GetType(err) == ErrorTypeForbidden
-}
-
-// IsInternal checks if an error is an internal error
-func IsInternal(err error) bool {
-	return GetType(err) == ErrorTypeInternal
-}
-
-// IsExternal checks if an error is an external service error
-func IsExternal(err error) bool {
-	return GetType(err) == ErrorTypeExternal
 }

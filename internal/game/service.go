@@ -88,11 +88,6 @@ func (s *Service) GetGameStats(ctx context.Context, gameID int) (*GameStats, err
 	return s.gameRepo.GetGameStats(ctx, gameID)
 }
 
-// DeleteGame deletes a game and all related data
-func (s *Service) DeleteGame(ctx context.Context, gameID int) error {
-	return s.gameRepo.DeleteGame(ctx, gameID)
-}
-
 // deleteExistingGames deletes all existing games to maintain single game design
 func (s *Service) deleteExistingGames(ctx context.Context) error {
 	existingGames, err := s.gameRepo.GetAllGames(ctx)

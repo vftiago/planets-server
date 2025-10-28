@@ -136,25 +136,6 @@ func (r *Repository) GetAllGames(ctx context.Context) ([]Game, error) {
 	return games, nil
 }
 
-func (r *Repository) UpdateGameStatus(ctx context.Context, gameID int, status GameStatus) error {
-	query := `UPDATE games SET status = $1 WHERE id = $2`
-	result, err := r.db.ExecContext(ctx, query, status, gameID)
-	if err != nil {
-		return errors.WrapInternal("failed to update game status", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return errors.WrapInternal("failed to get rows affected after status update", err)
-	}
-
-	if rowsAffected == 0 {
-		return errors.NotFoundf("game not found with id: %d", gameID)
-	}
-
-	return nil
-}
-
 func (r *Repository) ActivateGame(ctx context.Context, gameID int, tx *database.Tx) error {
 	exec := r.getExecutor(tx)
 

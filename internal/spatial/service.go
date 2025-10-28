@@ -20,27 +20,6 @@ func NewService(repo *Repository, logger *slog.Logger) *Service {
 	}
 }
 
-func (s *Service) GetEntitiesByParent(ctx context.Context, parentID int, entityType EntityType) ([]SpatialEntity, error) {
-	return s.repo.GetEntitiesByParent(ctx, parentID, entityType)
-}
-
-func (s *Service) CreateEntity(ctx context.Context, gameID, parentID int, entityType EntityType, x, y int, name string, tx *database.Tx) (*SpatialEntity, error) {
-	level := EntityLevels[entityType]
-	return s.repo.CreateEntity(ctx, gameID, parentID, entityType, level, x, y, name, "", tx)
-}
-
-func (s *Service) GetGalaxiesByGame(ctx context.Context, gameID int) ([]SpatialEntity, error) {
-	return s.GetEntitiesByParent(ctx, gameID, EntityTypeGalaxy)
-}
-
-func (s *Service) GetSectorsByGalaxy(ctx context.Context, galaxyID int) ([]SpatialEntity, error) {
-	return s.GetEntitiesByParent(ctx, galaxyID, EntityTypeSector)
-}
-
-func (s *Service) GetSystemsBySector(ctx context.Context, sectorID int) ([]SpatialEntity, error) {
-	return s.GetEntitiesByParent(ctx, sectorID, EntityTypeSystem)
-}
-
 func (s *Service) GenerateEntities(ctx context.Context, gameID, parentID int, entityType EntityType, count int, tx *database.Tx) ([]SpatialEntity, error) {
 	logger := s.logger.With(
 		"operation", "generate_entities",
