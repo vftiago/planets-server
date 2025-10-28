@@ -46,7 +46,7 @@ func (s *Service) CreateGame(config GameConfig, universeConfig UniverseConfig) (
 		logger.Error("Failed to begin transaction", "error", err)
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	
+
 	// Ensure rollback on any error
 	defer func() {
 		if err != nil {
@@ -153,40 +153,33 @@ func (s *Service) deleteExistingGames() error {
 func (s *Service) generateUniverse(gameID int, config UniverseConfig, tx *database.Tx) error {
 	s.logger.Info("Starting universe generation", "game_id", gameID)
 
-	// Level 1: Generate all galaxies
+	// Level 1: Generate all galaxies in one batch
 	galaxies, err := s.spatialService.GenerateEntities(gameID, gameID, spatial.EntityTypeGalaxy, config.GalaxyCount, tx)
 	if err != nil {
 		return fmt.Errorf("failed to generate galaxies: %w", err)
 	}
 
-	// Level 2: Generate all sectors for all galaxies
-	var sectors []spatial.SpatialEntity
-	for _, galaxy := range galaxies {
-		galaxySectors, err := s.spatialService.GenerateEntities(gameID, galaxy.ID, spatial.EntityTypeSector, config.SectorsPerGalaxy, tx)
-		if err != nil {
-			return fmt.Errorf("failed to generate sectors for galaxy %d: %w", galaxy.ID, err)
-		}
-		sectors = append(sectors, galaxySectors...)
+	// Level 2: Generate all sectors for all galaxies in one batch
+	sectors, err := s.generateSectorsForGalaxies(gameID, galaxies, config.SectorsPerGalaxy, tx)
+	if err != nil {
+		return fmt.Errorf("failed to generate sectors: %w", err)
 	}
 
-	// Level 3: Generate all systems for all sectors
-	var systems []spatial.SpatialEntity
-	for _, sector := range sectors {
-		sectorSystems, err := s.spatialService.GenerateEntities(gameID, sector.ID, spatial.EntityTypeSystem, config.SystemsPerSector, tx)
-		if err != nil {
-			return fmt.Errorf("failed to generate systems for sector %d: %w", sector.ID, err)
-		}
-		systems = append(systems, sectorSystems...)
+	// Level 3: Generate all systems for all sectors in one batch
+	systems, err := s.generateSystemsForSectors(gameID, sectors, config.SystemsPerSector, tx)
+	if err != nil {
+		return fmt.Errorf("failed to generate systems: %w", err)
 	}
 
-	// Level 4: Generate all planets for all systems
-	var totalPlanets int
-	for _, system := range systems {
-		planetCount, err := s.planetService.GeneratePlanets(system.ID, config.MinPlanetsPerSystem, config.MaxPlanetsPerSystem, tx)
-		if err != nil {
-			return fmt.Errorf("failed to generate planets for system %d: %w", system.ID, err)
-		}
-		totalPlanets += planetCount
+	// Level 4: Generate all planets for all systems in one batch
+	systemIDs := make([]int, len(systems))
+	for i, system := range systems {
+		systemIDs[i] = system.ID
+	}
+
+	totalPlanets, err := s.planetService.GeneratePlanetsForSystems(systemIDs, config.MinPlanetsPerSystem, config.MaxPlanetsPerSystem, tx)
+	if err != nil {
+		return fmt.Errorf("failed to generate planets: %w", err)
 	}
 
 	// Update the game with final counts
@@ -203,4 +196,38 @@ func (s *Service) generateUniverse(gameID int, config UniverseConfig, tx *databa
 		"planets", totalPlanets)
 
 	return nil
+}
+
+// generateSectorsForGalaxies generates all sectors for multiple galaxies in a single batch operation
+func (s *Service) generateSectorsForGalaxies(gameID int, galaxies []spatial.SpatialEntity, sectorsPerGalaxy int, tx *database.Tx) ([]spatial.SpatialEntity, error) {
+	if len(galaxies) == 0 {
+		return []spatial.SpatialEntity{}, nil
+	}
+
+	s.logger.Info("Generating sectors for all galaxies in single batch", "galaxy_count", len(galaxies), "sectors_per_galaxy", sectorsPerGalaxy)
+
+	// Generate ALL sectors for ALL galaxies in a single batch insert
+	sectors, err := s.spatialService.GenerateEntitiesForMultipleParents(gameID, galaxies, spatial.EntityTypeSector, sectorsPerGalaxy, tx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch generate sectors: %w", err)
+	}
+
+	return sectors, nil
+}
+
+// generateSystemsForSectors generates all systems for multiple sectors in a single batch operation
+func (s *Service) generateSystemsForSectors(gameID int, sectors []spatial.SpatialEntity, systemsPerSector int, tx *database.Tx) ([]spatial.SpatialEntity, error) {
+	if len(sectors) == 0 {
+		return []spatial.SpatialEntity{}, nil
+	}
+
+	s.logger.Info("Generating systems for all sectors in single batch", "sector_count", len(sectors), "systems_per_sector", systemsPerSector)
+
+	// Generate ALL systems for ALL sectors in a single batch insert
+	systems, err := s.spatialService.GenerateEntitiesForMultipleParents(gameID, sectors, spatial.EntityTypeSystem, systemsPerSector, tx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch generate systems: %w", err)
+	}
+
+	return systems, nil
 }

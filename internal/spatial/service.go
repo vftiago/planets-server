@@ -49,38 +49,124 @@ func (s *Service) GenerateEntities(gameID, parentID int, entityType EntityType, 
 		"parent_id", parentID,
 	)
 	logger.Debug("Generating spatial entities")
-	
+
 	entitiesPerSide := int(math.Sqrt(float64(count)))
 	if entitiesPerSide*entitiesPerSide != count {
 		entitiesPerSide = int(math.Ceil(math.Sqrt(float64(count))))
 	}
-	
+
 	names := s.generateNames(entityType)
 	nameIndex := 0
-	var entities []SpatialEntity
-	
+	level := EntityLevels[entityType]
+
+	// Prepare all entities upfront for batch insert
+	var batchRequests []BatchInsertRequest
+
 	for x := 0; x < entitiesPerSide; x++ {
 		for y := 0; y < entitiesPerSide; y++ {
-			if len(entities) >= count {
+			if len(batchRequests) >= count {
 				break
 			}
-			
+
 			name := names[nameIndex%len(names)]
 			nameIndex++
-			
-			entity, err := s.CreateEntity(gameID, parentID, entityType, x, y, name, tx)
-			if err != nil {
-				logger.Error("Failed to create entity", "error", err, "coordinates", fmt.Sprintf("(%d,%d)", x, y))
-				return nil, fmt.Errorf("failed to create %s at (%d,%d): %w", entityType, x, y, err)
-			}
-			entities = append(entities, *entity)
+
+			batchRequests = append(batchRequests, BatchInsertRequest{
+				GameID:      gameID,
+				ParentID:    parentID,
+				EntityType:  entityType,
+				Level:       level,
+				XCoord:      x,
+				YCoord:      y,
+				Name:        name,
+				Description: "",
+			})
 		}
-		if len(entities) >= count {
+		if len(batchRequests) >= count {
 			break
 		}
 	}
-	
+
+	// Perform batch insert
+	entities, err := s.repo.CreateEntitiesBatch(batchRequests, tx)
+	if err != nil {
+		logger.Error("Failed to batch create entities", "error", err)
+		return nil, fmt.Errorf("failed to batch create %s: %w", entityType, err)
+	}
+
 	logger.Info("Entities generated", "count", len(entities))
+	return entities, nil
+}
+
+// GenerateEntitiesForMultipleParents generates entities for multiple parent entities in a single batch operation
+func (s *Service) GenerateEntitiesForMultipleParents(gameID int, parents []SpatialEntity, entityType EntityType, countPerParent int, tx *database.Tx) ([]SpatialEntity, error) {
+	logger := s.logger.With(
+		"operation", "generate_entities_for_multiple_parents",
+		"type", entityType,
+		"parent_count", len(parents),
+		"count_per_parent", countPerParent,
+		"game_id", gameID,
+	)
+	logger.Debug("Generating spatial entities for multiple parents")
+
+	if len(parents) == 0 {
+		return []SpatialEntity{}, nil
+	}
+
+	entitiesPerSide := int(math.Sqrt(float64(countPerParent)))
+	if entitiesPerSide*entitiesPerSide != countPerParent {
+		entitiesPerSide = int(math.Ceil(math.Sqrt(float64(countPerParent))))
+	}
+
+	names := s.generateNames(entityType)
+	level := EntityLevels[entityType]
+
+	// Prepare all entities for all parents upfront for batch insert
+	var batchRequests []BatchInsertRequest
+
+	for _, parent := range parents {
+		nameIndex := 0
+		entityCount := 0
+
+		for x := 0; x < entitiesPerSide; x++ {
+			for y := 0; y < entitiesPerSide; y++ {
+				if entityCount >= countPerParent {
+					break
+				}
+
+				name := names[nameIndex%len(names)]
+				nameIndex++
+
+				batchRequests = append(batchRequests, BatchInsertRequest{
+					GameID:      gameID,
+					ParentID:    parent.ID,
+					EntityType:  entityType,
+					Level:       level,
+					XCoord:      x,
+					YCoord:      y,
+					Name:        name,
+					Description: "",
+				})
+
+				entityCount++
+			}
+			if entityCount >= countPerParent {
+				break
+			}
+		}
+	}
+
+	// Perform single batch insert for all entities across all parents
+	entities, err := s.repo.CreateEntitiesBatch(batchRequests, tx)
+	if err != nil {
+		logger.Error("Failed to batch create entities for multiple parents", "error", err)
+		return nil, fmt.Errorf("failed to batch create %s for multiple parents: %w", entityType, err)
+	}
+
+	logger.Info("Entities generated for multiple parents",
+		"total_count", len(entities),
+		"parent_count", len(parents),
+		"avg_per_parent", len(entities)/len(parents))
 	return entities, nil
 }
 
