@@ -162,7 +162,7 @@ The game uses a hierarchical spatial structure:
 - **System**: Contains planets with random generation
 - **Planet**: Individual game objects with types, sizes, and populations
 
-Universe generation is orchestrated by the universe service, which coordinates galaxy, sector, system, and planet services to create the complete game world.
+Universe generation is orchestrated by the game service, which coordinates galaxy, sector, system, and planet services to create the complete game world.
 
 ### HTTP Layer
 

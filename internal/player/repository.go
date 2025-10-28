@@ -3,10 +3,9 @@ package player
 import (
 	"context"
 	"database/sql"
-	"fmt"
-	"log/slog"
 	"planets-server/internal/shared/config"
 	"planets-server/internal/shared/database"
+	"planets-server/internal/shared/errors"
 )
 
 type Repository struct {
@@ -14,30 +13,19 @@ type Repository struct {
 }
 
 func NewRepository(db *database.DB) *Repository {
-	logger := slog.With("component", "player_repository", "operation", "init")
-	logger.Debug("Initializing player repository")
 	return &Repository{db: db}
 }
 
 func (r *Repository) GetPlayerCount(ctx context.Context) (int, error) {
-	logger := slog.With("component", "player_repository", "operation", "get_count")
-	logger.Debug("Getting total player count")
-
 	var count int
 	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM players").Scan(&count)
 	if err != nil {
-		logger.Error("Failed to get player count", "error", err)
-		return 0, fmt.Errorf("failed to get player count: %w", err)
+		return 0, errors.WrapInternal("failed to get player count", err)
 	}
-
-	logger.Debug("Player count retrieved", "count", count)
 	return count, nil
 }
 
 func (r *Repository) GetAllPlayers(ctx context.Context) ([]Player, error) {
-	logger := slog.With("component", "player_repository", "operation", "get_all")
-	logger.Debug("Retrieving all players")
-
 	query := `
 		SELECT id, username, email, display_name, avatar_url, role, created_at, updated_at
 		FROM players
@@ -46,14 +34,9 @@ func (r *Repository) GetAllPlayers(ctx context.Context) ([]Player, error) {
 
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
-		logger.Error("Failed to query players", "error", err)
-		return nil, fmt.Errorf("failed to query players: %w", err)
+		return nil, errors.WrapInternal("failed to query players", err)
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			logger.Error("Failed to close rows", "error", err)
-		}
-	}()
+	defer rows.Close()
 
 	var players []Player
 	for rows.Next() {
@@ -70,35 +53,21 @@ func (r *Repository) GetAllPlayers(ctx context.Context) ([]Player, error) {
 			&player.UpdatedAt,
 		)
 		if err != nil {
-			logger.Error("Failed to scan player row", "error", err)
-			return nil, fmt.Errorf("failed to scan player: %w", err)
+			return nil, errors.WrapInternal("failed to scan player", err)
 		}
 		player.Role = ParsePlayerRole(roleStr)
 		players = append(players, player)
 	}
 
 	if err := rows.Err(); err != nil {
-		logger.Error("Error during rows iteration", "error", err)
-		return nil, fmt.Errorf("error iterating players: %w", err)
+		return nil, errors.WrapInternal("error iterating players", err)
 	}
 
-	logger.Debug("Players retrieved successfully", "count", len(players))
 	return players, nil
 }
 
 func (r *Repository) CreatePlayer(ctx context.Context, username, email, displayName string, avatarURL *string) (*Player, error) {
-	logger := slog.With(
-		"component", "player_repository",
-		"operation", "create",
-		"username", username,
-		"email", email,
-	)
-	logger.Info("Creating new player")
-
 	role := r.determinePlayerRole(email)
-	if role == PlayerRoleAdmin {
-		logger.Info("Creating player with admin role", "email", email)
-	}
 
 	query := `
 		INSERT INTO players (username, email, display_name, avatar_url, role)
@@ -120,16 +89,10 @@ func (r *Repository) CreatePlayer(ctx context.Context, username, email, displayN
 	)
 
 	if err != nil {
-		logger.Error("Failed to create player", "error", err)
-		return nil, fmt.Errorf("failed to create player: %w", err)
+		return nil, errors.WrapInternal("failed to create player", err)
 	}
 
 	player.Role = ParsePlayerRole(roleStr)
-
-	logger.Info("Player created successfully",
-		"player_id", player.ID,
-		"username", player.Username,
-		"role", player.Role)
 	return &player, nil
 }
 
@@ -142,13 +105,6 @@ func (r *Repository) determinePlayerRole(email string) PlayerRole {
 }
 
 func (r *Repository) FindPlayerByEmail(ctx context.Context, email string) (*Player, error) {
-	logger := slog.With(
-		"component", "player_repository",
-		"operation", "find_by_email",
-		"email", email,
-	)
-	logger.Debug("Finding player by email")
-
 	query := `
 		SELECT id, username, email, display_name, avatar_url, role, created_at, updated_at
 		FROM players
@@ -170,26 +126,16 @@ func (r *Repository) FindPlayerByEmail(ctx context.Context, email string) (*Play
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			logger.Debug("No player found with email")
-			return nil, nil
+			return nil, errors.NotFoundf("player not found with email: %s", email)
 		}
-		logger.Error("Database error finding player by email", "error", err)
-		return nil, fmt.Errorf("database error: %w", err)
+		return nil, errors.WrapInternal("failed to find player by email", err)
 	}
 
 	player.Role = ParsePlayerRole(roleStr)
-	logger.Debug("Found player by email", "player_id", player.ID, "role", player.Role)
 	return &player, nil
 }
 
 func (r *Repository) GetPlayerByID(ctx context.Context, id int) (*Player, error) {
-	logger := slog.With(
-		"component", "player_repository",
-		"operation", "get_by_id",
-		"player_id", id,
-	)
-	logger.Debug("Getting player by ID")
-
 	query := `
 		SELECT id, username, email, display_name, avatar_url, role, created_at, updated_at
 		FROM players
@@ -211,49 +157,34 @@ func (r *Repository) GetPlayerByID(ctx context.Context, id int) (*Player, error)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			logger.Debug("No player found with ID")
-			return nil, nil
+			return nil, errors.NotFoundf("player not found with id: %d", id)
 		}
-		logger.Error("Database error getting player by ID", "error", err)
-		return nil, fmt.Errorf("database error: %w", err)
+		return nil, errors.WrapInternal("failed to get player by id", err)
 	}
 
 	player.Role = ParsePlayerRole(roleStr)
-	logger.Debug("Found player by ID", "username", player.Username, "role", player.Role)
 	return &player, nil
 }
 
 func (r *Repository) UpdatePlayerRole(ctx context.Context, playerID int, role PlayerRole) error {
-	logger := slog.With(
-		"component", "player_repository",
-		"operation", "update_role",
-		"player_id", playerID,
-		"role", role,
-	)
-	logger.Info("Updating player role")
-
 	if !role.IsValid() {
-		return fmt.Errorf("invalid role: %s", role)
+		return errors.Validationf("invalid role: %s", role)
 	}
 
 	query := `UPDATE players SET role = $1 WHERE id = $2`
 	result, err := r.db.ExecContext(ctx, query, role.String(), playerID)
 	if err != nil {
-		logger.Error("Failed to update player role", "error", err)
-		return fmt.Errorf("failed to update player role: %w", err)
+		return errors.WrapInternal("failed to update player role", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		logger.Error("Failed to get rows affected", "error", err)
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return errors.WrapInternal("failed to get rows affected after role update", err)
 	}
 
 	if rowsAffected == 0 {
-		logger.Warn("Player not found for role update")
-		return fmt.Errorf("player not found")
+		return errors.NotFoundf("player not found with id: %d", playerID)
 	}
 
-	logger.Info("Player role updated successfully")
 	return nil
 }

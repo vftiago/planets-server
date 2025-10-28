@@ -67,8 +67,8 @@ func main() {
 	planetService := planet.NewService(planetRepo, logger)
 
 	// Initialize game
-	gameRepo := game.NewRepository(db, logger)
-	gameService := game.NewService(gameRepo, spatialService, planetService, logger)
+	gameRepo := game.NewRepository(db)
+	gameService := game.NewService(gameRepo, spatialService, planetService)
 
 	corsMiddleware := initCORS()
 	rateLimiter := initRateLimit()
