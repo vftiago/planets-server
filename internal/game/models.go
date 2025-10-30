@@ -1,6 +1,7 @@
 package game
 
 import (
+	"planets-server/internal/spatial"
 	"time"
 )
 
@@ -55,4 +56,17 @@ type UniverseConfig struct {
 	SystemsPerSector    int `json:"systems_per_sector"`
 	MinPlanetsPerSystem int `json:"min_planets_per_system"`
 	MaxPlanetsPerSystem int `json:"max_planets_per_system"`
+}
+
+type SpatialLevel struct {
+	EntityType spatial.EntityType
+	Count      int
+}
+
+func (c UniverseConfig) BuildGenerationPlan() []SpatialLevel {
+	return []SpatialLevel{
+		{EntityType: spatial.EntityTypeGalaxy, Count: c.GalaxyCount},
+		{EntityType: spatial.EntityTypeSector, Count: c.SectorsPerGalaxy},
+		{EntityType: spatial.EntityTypeSystem, Count: c.SystemsPerSector},
+	}
 }

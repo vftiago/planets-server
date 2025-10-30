@@ -20,82 +20,18 @@ func NewService(repo *Repository, logger *slog.Logger) *Service {
 	}
 }
 
-func (s *Service) GenerateEntities(ctx context.Context, gameID, parentID int, entityType EntityType, count int, tx *database.Tx) ([]SpatialEntity, error) {
+// GenerateEntities generates entities for one or more parent entities in a single batch operation
+func (s *Service) GenerateEntities(ctx context.Context, gameID int, parentIDs []int, entityType EntityType, countPerParent int, tx *database.Tx) ([]SpatialEntity, error) {
 	logger := s.logger.With(
 		"operation", "generate_entities",
 		"type", entityType,
-		"count", count,
-		"game_id", gameID,
-		"parent_id", parentID,
-	)
-	logger.Debug("Generating spatial entities")
-
-	entitiesPerSide := int(math.Sqrt(float64(count)))
-	if entitiesPerSide*entitiesPerSide != count {
-		entitiesPerSide = int(math.Ceil(math.Sqrt(float64(count))))
-	}
-
-	names := s.generateNames(entityType)
-	nameIndex := 0
-	level := EntityLevels[entityType]
-
-	// Prepare all entities upfront for batch insert
-	var batchRequests []BatchInsertRequest
-
-	for x := 0; x < entitiesPerSide; x++ {
-		// Check for context cancellation
-		if err := ctx.Err(); err != nil {
-			logger.Warn("Context cancelled during entity generation", "error", err)
-			return nil, fmt.Errorf("entity generation cancelled: %w", err)
-		}
-
-		for y := 0; y < entitiesPerSide; y++ {
-			if len(batchRequests) >= count {
-				break
-			}
-
-			name := names[nameIndex%len(names)]
-			nameIndex++
-
-			batchRequests = append(batchRequests, BatchInsertRequest{
-				GameID:      gameID,
-				ParentID:    parentID,
-				EntityType:  entityType,
-				Level:       level,
-				XCoord:      x,
-				YCoord:      y,
-				Name:        name,
-				Description: "",
-			})
-		}
-		if len(batchRequests) >= count {
-			break
-		}
-	}
-
-	// Perform batch insert
-	entities, err := s.repo.CreateEntitiesBatch(ctx, batchRequests, tx)
-	if err != nil {
-		logger.Error("Failed to batch create entities", "error", err)
-		return nil, fmt.Errorf("failed to batch create %s: %w", entityType, err)
-	}
-
-	logger.Info("Entities generated", "count", len(entities))
-	return entities, nil
-}
-
-// GenerateEntitiesForMultipleParents generates entities for multiple parent entities in a single batch operation
-func (s *Service) GenerateEntitiesForMultipleParents(ctx context.Context, gameID int, parents []SpatialEntity, entityType EntityType, countPerParent int, tx *database.Tx) ([]SpatialEntity, error) {
-	logger := s.logger.With(
-		"operation", "generate_entities_for_multiple_parents",
-		"type", entityType,
-		"parent_count", len(parents),
+		"parent_count", len(parentIDs),
 		"count_per_parent", countPerParent,
 		"game_id", gameID,
 	)
-	logger.Debug("Generating spatial entities for multiple parents")
+	logger.Debug("Generating spatial entities")
 
-	if len(parents) == 0 {
+	if len(parentIDs) == 0 {
 		return []SpatialEntity{}, nil
 	}
 
@@ -110,10 +46,10 @@ func (s *Service) GenerateEntitiesForMultipleParents(ctx context.Context, gameID
 	// Prepare all entities for all parents upfront for batch insert
 	var batchRequests []BatchInsertRequest
 
-	for _, parent := range parents {
+	for _, parentID := range parentIDs {
 		// Check for context cancellation
 		if err := ctx.Err(); err != nil {
-			logger.Warn("Context cancelled during entity generation for multiple parents", "error", err)
+			logger.Warn("Context cancelled during entity generation", "error", err)
 			return nil, fmt.Errorf("entity generation cancelled: %w", err)
 		}
 
@@ -131,7 +67,7 @@ func (s *Service) GenerateEntitiesForMultipleParents(ctx context.Context, gameID
 
 				batchRequests = append(batchRequests, BatchInsertRequest{
 					GameID:      gameID,
-					ParentID:    parent.ID,
+					ParentID:    parentID,
 					EntityType:  entityType,
 					Level:       level,
 					XCoord:      x,
@@ -151,14 +87,14 @@ func (s *Service) GenerateEntitiesForMultipleParents(ctx context.Context, gameID
 	// Perform single batch insert for all entities across all parents
 	entities, err := s.repo.CreateEntitiesBatch(ctx, batchRequests, tx)
 	if err != nil {
-		logger.Error("Failed to batch create entities for multiple parents", "error", err)
-		return nil, fmt.Errorf("failed to batch create %s for multiple parents: %w", entityType, err)
+		logger.Error("Failed to batch create entities", "error", err)
+		return nil, fmt.Errorf("failed to batch create %s: %w", entityType, err)
 	}
 
-	logger.Info("Entities generated for multiple parents",
+	logger.Info("Entities generated",
 		"total_count", len(entities),
-		"parent_count", len(parents),
-		"avg_per_parent", len(entities)/len(parents))
+		"parent_count", len(parentIDs),
+		"avg_per_parent", len(entities)/len(parentIDs))
 	return entities, nil
 }
 

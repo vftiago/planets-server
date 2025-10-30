@@ -59,8 +59,7 @@ func (s *Service) generateRandomPlanetType() PlanetType {
 	return PlanetTypeTerrestrial // fallback
 }
 
-// GeneratePlanetsForSystems generates planets for multiple systems in a single batch operation
-func (s *Service) GeneratePlanetsForSystems(ctx context.Context, systemIDs []int, minPlanets, maxPlanets int, tx *database.Tx) (int, error) {
+func (s *Service) GeneratePlanets(ctx context.Context, systemIDs []int, minPlanets, maxPlanets int, tx *database.Tx) (int, error) {
 	logger := s.logger.With(
 		"component", "planet_service",
 		"operation", "generate_planets_for_systems",
