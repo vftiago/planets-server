@@ -72,7 +72,6 @@ func (r *Repository) CreatePlanetsBatch(ctx context.Context, planets []BatchInse
 			0,
 			(data->>'MaxPopulation')::bigint,
 			NULL,
-			false
 		FROM json_array_elements($1::json) AS data
 		RETURNING id, system_id, planet_index, name, type, size, population, max_population, owner_id, created_at, updated_at`
 
