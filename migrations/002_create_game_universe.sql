@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS spatial_entities (
     updated_at TIMESTAMP DEFAULT NOW(),
     
     UNIQUE(parent_id, x_coord, y_coord),
-    CHECK (entity_type IN ('galaxy', 'sector', 'region', 'system')),
+    CHECK (entity_type IN ('galaxy', 'sector', 'system')),
     CHECK (level > 0),
     CHECK ((level = 1 AND parent_id = game_id) OR (level > 1))
 );

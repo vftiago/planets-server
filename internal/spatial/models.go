@@ -9,15 +9,13 @@ type EntityType string
 const (
 	EntityTypeGalaxy EntityType = "galaxy"
 	EntityTypeSector EntityType = "sector"
-	EntityTypeRegion EntityType = "region"
 	EntityTypeSystem EntityType = "system"
 )
 
 var EntityLevels = map[EntityType]int{
 	EntityTypeGalaxy: 1,
 	EntityTypeSector: 2,
-	EntityTypeRegion: 3,
-	EntityTypeSystem: 4,
+	EntityTypeSystem: 3,
 }
 
 type SpatialEntity struct {
@@ -39,4 +37,3 @@ type SpatialEntity struct {
 type Galaxy = SpatialEntity
 type Sector = SpatialEntity
 type System = SpatialEntity
-type Region = SpatialEntity
