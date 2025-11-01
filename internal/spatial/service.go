@@ -21,7 +21,7 @@ func NewService(repo *Repository, logger *slog.Logger) *Service {
 }
 
 // GenerateEntities generates entities for one or more parent entities in a single batch operation
-func (s *Service) GenerateEntities(ctx context.Context, gameID int, parentIDs []int, entityType EntityType, countPerParent int, tx *database.Tx) ([]SpatialEntity, error) {
+func (s *Service) GenerateEntities(ctx context.Context, gameID int, parentIDs []*int, entityType EntityType, countPerParent int, tx *database.Tx) ([]SpatialEntity, error) {
 	logger := s.logger.With(
 		"operation", "generate_entities",
 		"type", entityType,

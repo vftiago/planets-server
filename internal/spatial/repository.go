@@ -32,7 +32,7 @@ func (r *Repository) getExecutor(tx *database.Tx) database.Executor {
 // BatchInsertRequest represents a single entity to be inserted in a batch
 type BatchInsertRequest struct {
 	GameID      int
-	ParentID    int
+	ParentID    *int
 	EntityType  EntityType
 	Level       int
 	XCoord      int
@@ -93,11 +93,12 @@ func (r *Repository) CreateEntitiesBatch(ctx context.Context, entities []BatchIn
 	for rows.Next() {
 		var entity SpatialEntity
 		var descriptionVal sql.NullString
+		var parentIDVal sql.NullInt64
 
 		err := rows.Scan(
 			&entity.ID,
 			&entity.GameID,
-			&entity.ParentID,
+			&parentIDVal,
 			&entity.EntityType,
 			&entity.Level,
 			&entity.XCoord,
@@ -115,6 +116,11 @@ func (r *Repository) CreateEntitiesBatch(ctx context.Context, entities []BatchIn
 
 		if descriptionVal.Valid {
 			entity.Description = descriptionVal.String
+		}
+
+		if parentIDVal.Valid {
+			parentID := int(parentIDVal.Int64)
+			entity.ParentID = &parentID
 		}
 
 		createdEntities = append(createdEntities, entity)

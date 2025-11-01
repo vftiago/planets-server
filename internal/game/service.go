@@ -111,15 +111,16 @@ func (s *Service) generateUniverse(ctx context.Context, gameID int, config Unive
 			return fmt.Errorf("universe generation cancelled: %w", err)
 		}
 
-		var parentIDs []int
+		var parentIDs []*int
 		if i == 0 {
-			// For the first level, use the game ID as the parent
-			parentIDs = []int{gameID}
+			// For first level parent_id is NULL
+			parentIDs = []*int{nil}
 		} else {
 			// For subsequent levels, extract parent IDs from previous level entities
-			parentIDs = make([]int, len(currentLevelEntities))
+			parentIDs = make([]*int, len(currentLevelEntities))
 			for j, entity := range currentLevelEntities {
-				parentIDs[j] = entity.ID
+				id := entity.ID
+				parentIDs[j] = &id
 			}
 		}
 

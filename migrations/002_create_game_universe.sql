@@ -20,25 +20,30 @@ CREATE TABLE IF NOT EXISTS games (
 CREATE TABLE IF NOT EXISTS spatial_entities (
     id SERIAL PRIMARY KEY,
     game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
-    parent_id INTEGER NOT NULL,
-    
+    parent_id INTEGER REFERENCES spatial_entities(id) ON DELETE CASCADE,
+
     entity_type VARCHAR(20) NOT NULL,
     level INTEGER NOT NULL,
     x_coord INTEGER NOT NULL,
     y_coord INTEGER NOT NULL,
-    
+
     name VARCHAR(100) NOT NULL,
     description TEXT,
     child_count INTEGER NOT NULL DEFAULT 0,
-    
+
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
-    
-    UNIQUE(parent_id, x_coord, y_coord),
+
     CHECK (entity_type IN ('galaxy', 'sector', 'system')),
     CHECK (level > 0),
-    CHECK ((level = 1 AND parent_id = game_id) OR (level > 1))
+    CHECK ((level = 1 AND parent_id IS NULL) OR (level > 1 AND parent_id IS NOT NULL))
 );
+
+-- Unique constraint for level 1 entities (galaxies): coordinates unique within game
+CREATE UNIQUE INDEX idx_spatial_entities_level1_coords ON spatial_entities (game_id, x_coord, y_coord) WHERE level = 1;
+
+-- Unique constraint for level 2+ entities: coordinates unique within parent
+CREATE UNIQUE INDEX idx_spatial_entities_parent_coords ON spatial_entities (parent_id, x_coord, y_coord) WHERE parent_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS planets (
     id SERIAL PRIMARY KEY,

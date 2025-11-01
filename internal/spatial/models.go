@@ -21,7 +21,7 @@ var EntityLevels = map[EntityType]int{
 type SpatialEntity struct {
 	ID          int        `json:"id"`
 	GameID      int        `json:"game_id"`
-	ParentID    int        `json:"parent_id"`
+	ParentID    *int       `json:"parent_id"`
 	EntityType  EntityType `json:"entity_type"`
 	Level       int        `json:"level"`
 	XCoord      int        `json:"x_coord"`
