@@ -21,7 +21,8 @@ func NewService(repo *Repository, logger *slog.Logger) *Service {
 }
 
 // GenerateEntities generates entities for one or more parent entities in a single batch operation
-func (s *Service) GenerateEntities(ctx context.Context, gameID int, parentIDs []*int, entityType EntityType, countPerParent int, tx *database.Tx) ([]SpatialEntity, error) {
+// Returns only the IDs of created entities to minimize memory usage
+func (s *Service) GenerateEntities(ctx context.Context, gameID int, parentIDs []*int, entityType EntityType, countPerParent int, tx *database.Tx) ([]int, error) {
 	logger := s.logger.With(
 		"operation", "generate_entities",
 		"type", entityType,
@@ -32,7 +33,7 @@ func (s *Service) GenerateEntities(ctx context.Context, gameID int, parentIDs []
 	logger.Debug("Generating spatial entities")
 
 	if len(parentIDs) == 0 {
-		return []SpatialEntity{}, nil
+		return []int{}, nil
 	}
 
 	entitiesPerSide := int(math.Sqrt(float64(countPerParent)))
@@ -85,17 +86,17 @@ func (s *Service) GenerateEntities(ctx context.Context, gameID int, parentIDs []
 	}
 
 	// Perform single batch insert for all entities across all parents
-	entities, err := s.repo.CreateEntitiesBatch(ctx, batchRequests, tx)
+	entityIDs, err := s.repo.CreateEntitiesBatch(ctx, batchRequests, tx)
 	if err != nil {
 		logger.Error("Failed to batch create entities", "error", err)
 		return nil, fmt.Errorf("failed to batch create %s: %w", entityType, err)
 	}
 
 	logger.Info("Entities generated",
-		"total_count", len(entities),
+		"total_count", len(entityIDs),
 		"parent_count", len(parentIDs),
-		"avg_per_parent", len(entities)/len(parentIDs))
-	return entities, nil
+		"avg_per_parent", len(entityIDs)/len(parentIDs))
+	return entityIDs, nil
 }
 
 func (s *Service) generateNames(entityType EntityType) []string {

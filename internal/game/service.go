@@ -104,7 +104,7 @@ func (s *Service) deleteExistingGames(ctx context.Context) error {
 func (s *Service) generateUniverse(ctx context.Context, gameID int, config UniverseConfig, tx *database.Tx) error {
 	plan := config.BuildGenerationPlan()
 
-	var currentLevelEntities []spatial.SpatialEntity
+	var currentLevelIDs []int
 
 	for i, level := range plan {
 		if err := ctx.Err(); err != nil {
@@ -116,15 +116,16 @@ func (s *Service) generateUniverse(ctx context.Context, gameID int, config Unive
 			// For first level parent_id is NULL
 			parentIDs = []*int{nil}
 		} else {
-			// For subsequent levels, extract parent IDs from previous level entities
-			parentIDs = make([]*int, len(currentLevelEntities))
-			for j, entity := range currentLevelEntities {
-				id := entity.ID
-				parentIDs[j] = &id
+			// For subsequent levels, use IDs from previous level as parents
+			parentIDs = make([]*int, len(currentLevelIDs))
+			for j, id := range currentLevelIDs {
+				idCopy := id
+				parentIDs[j] = &idCopy
 			}
 		}
 
-		entities, err := s.spatialService.GenerateEntities(
+		var err error
+		currentLevelIDs, err = s.spatialService.GenerateEntities(
 			ctx,
 			gameID,
 			parentIDs,
@@ -135,14 +136,10 @@ func (s *Service) generateUniverse(ctx context.Context, gameID int, config Unive
 		if err != nil {
 			return fmt.Errorf("failed to generate %s: %w", level.EntityType, err)
 		}
-
-		currentLevelEntities = entities
 	}
 
-	systemIDs := make([]int, len(currentLevelEntities))
-	for i, system := range currentLevelEntities {
-		systemIDs[i] = system.ID
-	}
+	// Final level IDs are system IDs for planet generation
+	systemIDs := currentLevelIDs
 
 	totalPlanets, err := s.planetService.GeneratePlanets(
 		ctx,

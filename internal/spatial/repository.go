@@ -2,7 +2,6 @@ package spatial
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -42,9 +41,10 @@ type BatchInsertRequest struct {
 }
 
 // CreateEntitiesBatch creates multiple spatial entities in a single database operation using JSON
-func (r *Repository) CreateEntitiesBatch(ctx context.Context, entities []BatchInsertRequest, tx *database.Tx) ([]SpatialEntity, error) {
+// Returns only the IDs of created entities to minimize memory usage
+func (r *Repository) CreateEntitiesBatch(ctx context.Context, entities []BatchInsertRequest, tx *database.Tx) ([]int, error) {
 	if len(entities) == 0 {
-		return []SpatialEntity{}, nil
+		return []int{}, nil
 	}
 
 	exec := r.getExecutor(tx)
@@ -76,7 +76,7 @@ func (r *Repository) CreateEntitiesBatch(ctx context.Context, entities []BatchIn
 			data->>'Description',
 			0
 		FROM json_array_elements($1::json) AS data
-		RETURNING id, game_id, parent_id, entity_type, level, x_coord, y_coord, name, description, child_count, created_at, updated_at`
+		RETURNING id`
 
 	rows, err := exec.QueryContext(ctx, query, string(entitiesJSON))
 	if err != nil {
@@ -89,48 +89,22 @@ func (r *Repository) CreateEntitiesBatch(ctx context.Context, entities []BatchIn
 		}
 	}()
 
-	var createdEntities []SpatialEntity
+	var entityIDs []int
 	for rows.Next() {
-		var entity SpatialEntity
-		var descriptionVal sql.NullString
-		var parentIDVal sql.NullInt64
-
-		err := rows.Scan(
-			&entity.ID,
-			&entity.GameID,
-			&parentIDVal,
-			&entity.EntityType,
-			&entity.Level,
-			&entity.XCoord,
-			&entity.YCoord,
-			&entity.Name,
-			&descriptionVal,
-			&entity.ChildCount,
-			&entity.CreatedAt,
-			&entity.UpdatedAt,
-		)
+		var id int
+		err := rows.Scan(&id)
 		if err != nil {
-			logger.Error("Failed to scan spatial entity row", "error", err)
-			return nil, fmt.Errorf("failed to scan spatial entity: %w", err)
+			logger.Error("Failed to scan entity ID", "error", err)
+			return nil, fmt.Errorf("failed to scan entity ID: %w", err)
 		}
-
-		if descriptionVal.Valid {
-			entity.Description = descriptionVal.String
-		}
-
-		if parentIDVal.Valid {
-			parentID := int(parentIDVal.Int64)
-			entity.ParentID = &parentID
-		}
-
-		createdEntities = append(createdEntities, entity)
+		entityIDs = append(entityIDs, id)
 	}
 
 	if err := rows.Err(); err != nil {
 		logger.Error("Error during rows iteration", "error", err)
-		return nil, fmt.Errorf("error iterating spatial entities: %w", err)
+		return nil, fmt.Errorf("error iterating entity IDs: %w", err)
 	}
 
-	logger.Info("Spatial entities batch created successfully", "count", len(createdEntities))
-	return createdEntities, nil
+	logger.Info("Spatial entities batch created successfully", "count", len(entityIDs))
+	return entityIDs, nil
 }
