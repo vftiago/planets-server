@@ -17,6 +17,7 @@ import (
 	"planets-server/internal/shared/config"
 	"planets-server/internal/shared/database"
 	"planets-server/internal/shared/logger"
+	"planets-server/internal/shared/redis"
 	"planets-server/internal/spatial"
 )
 
@@ -36,6 +37,21 @@ func main() {
 		"port", cfg.Server.Port,
 	)
 
+	redisClient, err := initRedis()
+	if err != nil {
+		logger.Error("Failed to initialize Redis", "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if redisClient != nil {
+			if err := redisClient.Close(); err != nil {
+				logger.Error("Failed to close Redis connection", "error", err)
+			}
+		}
+	}()
+
+	auth.InitStateManager(redisClient)
+
 	oauthConfig := initOAuth()
 
 	db, err := initDatabase()
@@ -54,19 +70,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize domain repositories
 	authRepo := auth.NewRepository(db)
 	playerRepo := player.NewRepository(db)
 	spatialRepo := spatial.NewRepository(db, logger)
 	planetRepo := planet.NewRepository(db, logger)
 
-	// Initialize domain services
 	authService := auth.NewService(authRepo, logger)
 	playerService := player.NewService(playerRepo, logger)
 	spatialService := spatial.NewService(spatialRepo, logger)
 	planetService := planet.NewService(planetRepo, logger)
 
-	// Initialize game
 	gameRepo := game.NewRepository(db)
 	gameService := game.NewService(gameRepo, spatialService, planetService)
 
@@ -82,6 +95,29 @@ func main() {
 	go startServer(httpServer, logger)
 
 	waitForShutdown(httpServer, logger)
+}
+
+func initRedis() (*redis.Client, error) {
+	cfg := config.GlobalConfig
+	logger := slog.With("component", "redis", "operation", "init")
+	logger.Debug("Initializing Redis connection")
+
+	if !cfg.Redis.Enabled {
+		logger.Info("Redis disabled, OAuth state will use in-memory storage")
+		return nil, nil
+	}
+
+	redisClient, err := redis.Connect()
+	if err != nil {
+		logger.Error("Failed to connect to Redis", "error", err)
+		return nil, err
+	}
+
+	logger.Info("Redis initialized successfully",
+		"url_provided", cfg.Redis.URL != "",
+		"host", cfg.Redis.Host)
+
+	return redisClient, nil
 }
 
 func initOAuth() *auth.OAuthConfig {

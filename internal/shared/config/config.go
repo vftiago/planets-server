@@ -12,6 +12,7 @@ import (
 type Config struct {
 	Server    ServerConfig
 	Database  DatabaseConfig
+	Redis     RedisConfig
 	Auth      AuthConfig
 	OAuth     OAuthConfig
 	Frontend  FrontendConfig
@@ -19,6 +20,15 @@ type Config struct {
 	RateLimit RateLimitConfig
 	Universe  UniverseConfig
 	Admin     AdminConfig
+}
+
+type RedisConfig struct {
+	Enabled  bool
+	URL      string
+	Host     string
+	Port     string
+	Password string
+	DB       int
 }
 
 type ServerConfig struct {
@@ -124,6 +134,7 @@ func load() (*Config, error) {
 	config := &Config{
 		Server:    loadServerConfig(),
 		Database:  loadDatabaseConfig(),
+		Redis:     loadRedisConfig(),
 		Auth:      loadAuthConfig(),
 		OAuth:     loadOAuthConfig(),
 		Frontend:  loadFrontendConfig(),
@@ -134,6 +145,22 @@ func load() (*Config, error) {
 	}
 
 	return config, nil
+}
+
+func loadRedisConfig() RedisConfig {
+	enabled := utils.GetEnv("REDIS_ENABLED", "true") == "true"
+	redisURL := utils.GetEnv("REDIS_URL", "")
+
+	db, _ := strconv.Atoi(utils.GetEnv("REDIS_DB", "0"))
+
+	return RedisConfig{
+		Enabled:  enabled,
+		URL:      redisURL,
+		Host:     utils.GetEnv("REDIS_HOST", "localhost"),
+		Port:     utils.GetEnv("REDIS_PORT", "6379"),
+		Password: utils.GetEnv("REDIS_PASSWORD", ""),
+		DB:       db,
+	}
 }
 
 func loadServerConfig() ServerConfig {
