@@ -6,10 +6,16 @@ DROP TABLE IF EXISTS games CASCADE;
 DROP TABLE IF EXISTS player_auth_providers CASCADE;
 DROP TABLE IF EXISTS players CASCADE;
 
+DROP TYPE IF EXISTS planet_type CASCADE;
+DROP TYPE IF EXISTS entity_type CASCADE;
+
 DROP FUNCTION IF EXISTS update_updated_at_column CASCADE;
 DROP FUNCTION IF EXISTS update_spatial_child_counts CASCADE;
 DROP FUNCTION IF EXISTS update_planet_counts CASCADE;
 DROP FUNCTION IF EXISTS update_player_stats CASCADE;
+
+CREATE TYPE planet_type AS ENUM ('barren', 'terrestrial', 'gas_giant', 'ice', 'volcanic');
+CREATE TYPE entity_type AS ENUM ('galaxy', 'sector', 'system');
 
 CREATE TABLE players (
     id SERIAL PRIMARY KEY,
@@ -54,7 +60,7 @@ CREATE TABLE spatial_entities (
     id SERIAL PRIMARY KEY,
     game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
     parent_id INTEGER REFERENCES spatial_entities(id) ON DELETE CASCADE,
-    entity_type VARCHAR(20) NOT NULL,
+    entity_type entity_type NOT NULL,
     level INTEGER NOT NULL,
     x_coord INTEGER NOT NULL,
     y_coord INTEGER NOT NULL,
@@ -63,7 +69,6 @@ CREATE TABLE spatial_entities (
     child_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
-    CHECK (entity_type IN ('galaxy', 'sector', 'system')),
     CHECK (level > 0),
     CHECK ((level = 1 AND parent_id IS NULL) OR (level > 1 AND parent_id IS NOT NULL))
 );
@@ -76,7 +81,7 @@ CREATE TABLE planets (
     system_id INTEGER REFERENCES spatial_entities(id) ON DELETE CASCADE,
     planet_index INTEGER NOT NULL,
     name VARCHAR(100) NOT NULL,
-    type VARCHAR(20) NOT NULL DEFAULT 'terrestrial',
+    type planet_type NOT NULL DEFAULT 'terrestrial',
     size INTEGER NOT NULL DEFAULT 100,
     population BIGINT NOT NULL DEFAULT 0,
     max_population BIGINT NOT NULL DEFAULT 1000000,
