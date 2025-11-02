@@ -12,6 +12,7 @@ import (
 	"planets-server/internal/player"
 	"planets-server/internal/shared/config"
 	"planets-server/internal/shared/cookies"
+	"planets-server/internal/shared/errors"
 )
 
 type GoogleAuthHandler struct {
@@ -21,7 +22,6 @@ type GoogleAuthHandler struct {
 	isConfigured  bool
 }
 
-// NewGoogleAuthHandler creates a new Google OAuth handler
 func NewGoogleAuthHandler(provider *providers.GoogleProvider, playerService *player.Service, authService *auth.Service, isConfigured bool) *GoogleAuthHandler {
 	return &GoogleAuthHandler{
 		provider:      provider,
@@ -31,7 +31,6 @@ func NewGoogleAuthHandler(provider *providers.GoogleProvider, playerService *pla
 	}
 }
 
-// HandleAuth initiates Google OAuth flow
 func (h *GoogleAuthHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 	logger := slog.With(
 		"handler", "google_oauth_init",
@@ -39,7 +38,6 @@ func (h *GoogleAuthHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 		"ip", r.RemoteAddr,
 	)
 
-	// Validate that OAuth is properly configured
 	if !h.isConfigured {
 		logger.Error("Google OAuth not configured - missing client credentials")
 		sendErrorResponse(w, http.StatusServiceUnavailable,
@@ -47,7 +45,6 @@ func (h *GoogleAuthHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate and store secure state token
 	state, err := auth.GenerateOAuthState("google", r.UserAgent())
 	if err != nil {
 		logger.Error("Failed to generate state token", "error", err)
@@ -65,7 +62,6 @@ func (h *GoogleAuthHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
-// HandleCallback processes Google OAuth callback
 func (h *GoogleAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
 	state := r.URL.Query().Get("state")
@@ -79,7 +75,6 @@ func (h *GoogleAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 		"has_state", state != "",
 	)
 
-	// Check if user denied authorization
 	if errorParam != "" {
 		logger.Warn("Google OAuth authorization denied",
 			"oauth_error", errorParam,
@@ -88,14 +83,12 @@ func (h *GoogleAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Validate authorization code
 	if code == "" {
 		logger.Error("Google OAuth callback missing authorization code")
 		redirectWithError(w, r, "oauth_error", "Missing authorization code")
 		return
 	}
 
-	// Validate state token against stored value
 	if err := auth.ValidateOAuthState(state, "google", r.UserAgent()); err != nil {
 		logger.Error("OAuth state validation failed",
 			"error", err,
@@ -107,7 +100,6 @@ func (h *GoogleAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 
 	logger.Info("OAuth state validation successful - proceeding with Google OAuth callback")
 
-	// Exchange code for token with timeout - use request context as parent
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
@@ -120,7 +112,6 @@ func (h *GoogleAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Get user info from Google
 	logger.Debug("Fetching user information from Google API")
 	userInfo, err := h.provider.GetUserInfo(ctx, token)
 	if err != nil {
@@ -131,33 +122,29 @@ func (h *GoogleAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Add user context to logger
 	userLogger := logger.With(
 		"user_email", userInfo.Email,
 		"google_user_id", userInfo.ID,
 		"user_name", userInfo.Name)
 
-	// Validate required user info
 	if userInfo.Email == "" {
 		userLogger.Error("Google user info missing required email field")
 		redirectWithError(w, r, "oauth_error", "Email address is required")
 		return
 	}
 
-	// Create/find player
 	userLogger.Info("Creating or finding player account for Google user")
 
-	// First check if auth provider exists
 	existingPlayerID, err := h.authService.FindPlayerByAuthProvider(ctx, "google", userInfo.ID)
-	if err != nil {
-		userLogger.Error("Failed to check auth provider", "error", err)
+	if err != nil && errors.GetType(err) != errors.ErrorTypeNotFound {
+		userLogger.Error("Database error checking auth provider", "error", err)
 		redirectWithError(w, r, "database_error", "Failed to authenticate user")
 		return
 	}
 
 	var player *player.Player
 	if existingPlayerID > 0 {
-		// Player exists via OAuth
+		userLogger.Debug("Found existing player via OAuth provider")
 		player, err = h.playerService.GetPlayerByID(ctx, existingPlayerID)
 		if err != nil {
 			userLogger.Error("Failed to get existing player", "error", err)
@@ -165,7 +152,7 @@ func (h *GoogleAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 			return
 		}
 	} else {
-		// Find or create player
+		userLogger.Debug("No existing OAuth link found, finding or creating player by email")
 		player, err = h.playerService.FindOrCreatePlayerByOAuth(
 			ctx,
 			"google",
@@ -180,19 +167,17 @@ func (h *GoogleAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		// Link auth provider
+		userLogger.Debug("Linking OAuth provider to player account")
 		err = h.authService.CreateAuthProvider(ctx, player.ID, "google", userInfo.ID, userInfo.Email)
 		if err != nil {
-			userLogger.Error("Failed to create auth provider", "error", err)
+			userLogger.Error("Failed to create auth provider link", "error", err)
 			redirectWithError(w, r, "database_error", "Failed to link account")
 			return
 		}
 	}
 
-	// Add player context to logger
 	playerLogger := userLogger.With("player_id", player.ID)
 
-	// Generate JWT
 	playerLogger.Debug("Generating JWT token for player")
 	jwtToken, err := auth.GenerateJWT(player.ID, player.Username, player.Email, player.Role.String())
 	if err != nil {
@@ -201,7 +186,6 @@ func (h *GoogleAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Set HttpOnly cookie
 	cookies.SetAuthCookie(w, jwtToken)
 
 	playerLogger.Info("Google OAuth authentication successful",

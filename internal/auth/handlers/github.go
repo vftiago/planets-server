@@ -13,6 +13,7 @@ import (
 	"planets-server/internal/player"
 	"planets-server/internal/shared/config"
 	"planets-server/internal/shared/cookies"
+	"planets-server/internal/shared/errors"
 )
 
 type GitHubAuthHandler struct {
@@ -22,7 +23,6 @@ type GitHubAuthHandler struct {
 	isConfigured  bool
 }
 
-// NewGitHubAuthHandler creates a new GitHub OAuth handler
 func NewGitHubAuthHandler(provider *providers.GitHubProvider, playerService *player.Service, authService *auth.Service, isConfigured bool) *GitHubAuthHandler {
 	return &GitHubAuthHandler{
 		provider:      provider,
@@ -32,7 +32,6 @@ func NewGitHubAuthHandler(provider *providers.GitHubProvider, playerService *pla
 	}
 }
 
-// HandleAuth initiates GitHub OAuth flow
 func (h *GitHubAuthHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 	logger := slog.With(
 		"handler", "github_oauth_init",
@@ -40,7 +39,6 @@ func (h *GitHubAuthHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 		"ip", r.RemoteAddr,
 	)
 
-	// Validate that OAuth is properly configured
 	if !h.isConfigured {
 		logger.Error("GitHub OAuth not configured - missing client credentials")
 		sendErrorResponse(w, http.StatusServiceUnavailable,
@@ -48,7 +46,6 @@ func (h *GitHubAuthHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate and store secure state token
 	state, err := auth.GenerateOAuthState("github", r.UserAgent())
 	if err != nil {
 		logger.Error("Failed to generate state token", "error", err)
@@ -66,7 +63,6 @@ func (h *GitHubAuthHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
-// HandleCallback processes GitHub OAuth callback
 func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
 	state := r.URL.Query().Get("state")
@@ -80,7 +76,6 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 		"has_state", state != "",
 	)
 
-	// Check if user denied authorization
 	if errorParam != "" {
 		logger.Warn("GitHub OAuth authorization denied",
 			"oauth_error", errorParam,
@@ -89,14 +84,12 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Validate authorization code
 	if code == "" {
 		logger.Error("GitHub OAuth callback missing authorization code")
 		redirectWithError(w, r, "oauth_error", "Missing authorization code")
 		return
 	}
 
-	// Validate state token against stored value
 	if err := auth.ValidateOAuthState(state, "github", r.UserAgent()); err != nil {
 		logger.Error("OAuth state validation failed",
 			"error", err,
@@ -108,7 +101,6 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 
 	logger.Info("OAuth state validation successful - proceeding with GitHub OAuth callback")
 
-	// Exchange code for token with timeout
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
@@ -121,7 +113,6 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Get user info from GitHub
 	logger.Debug("Fetching user information from GitHub API")
 	userInfo, err := h.provider.GetUserInfo(ctx, token)
 	if err != nil {
@@ -132,35 +123,31 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Add user context to logger
 	userLogger := logger.With(
 		"user_email", userInfo.Email,
 		"github_user_id", userInfo.ID,
 		"user_name", userInfo.Name)
 
-	// Validate required user info
 	if userInfo.Email == "" {
 		userLogger.Error("GitHub user info missing required email field")
 		redirectWithError(w, r, "oauth_error", "Email address is required for registration")
 		return
 	}
 
-	// Create/find player
 	userLogger.Info("Creating or finding player account for GitHub user")
 
 	githubUserID := strconv.Itoa(userInfo.ID)
 
-	// First check if auth provider exists
 	existingPlayerID, err := h.authService.FindPlayerByAuthProvider(ctx, "github", githubUserID)
-	if err != nil {
-		userLogger.Error("Failed to check auth provider", "error", err)
+	if err != nil && errors.GetType(err) != errors.ErrorTypeNotFound {
+		userLogger.Error("Database error checking auth provider", "error", err)
 		redirectWithError(w, r, "database_error", "Failed to authenticate user")
 		return
 	}
 
 	var player *player.Player
 	if existingPlayerID > 0 {
-		// Player exists via OAuth
+		userLogger.Debug("Found existing player via OAuth provider")
 		player, err = h.playerService.GetPlayerByID(ctx, existingPlayerID)
 		if err != nil {
 			userLogger.Error("Failed to get existing player", "error", err)
@@ -168,7 +155,7 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 			return
 		}
 	} else {
-		// Find or create player
+		userLogger.Debug("No existing OAuth link found, finding or creating player by email")
 		player, err = h.playerService.FindOrCreatePlayerByOAuth(
 			ctx,
 			"github",
@@ -183,19 +170,17 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		// Link auth provider
+		userLogger.Debug("Linking OAuth provider to player account")
 		err = h.authService.CreateAuthProvider(ctx, player.ID, "github", githubUserID, userInfo.Email)
 		if err != nil {
-			userLogger.Error("Failed to create auth provider", "error", err)
+			userLogger.Error("Failed to create auth provider link", "error", err)
 			redirectWithError(w, r, "database_error", "Failed to link account")
 			return
 		}
 	}
 
-	// Add player context to logger
 	playerLogger := userLogger.With("player_id", player.ID)
 
-	// Generate JWT
 	playerLogger.Debug("Generating JWT token for player")
 	jwtToken, err := auth.GenerateJWT(player.ID, player.Username, player.Email, player.Role.String())
 	if err != nil {
@@ -204,7 +189,6 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Set HttpOnly cookie
 	cookies.SetAuthCookie(w, jwtToken)
 
 	playerLogger.Info("GitHub OAuth authentication successful",

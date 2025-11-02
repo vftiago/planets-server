@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"planets-server/internal/shared/config"
+	"planets-server/internal/shared/errors"
 	"strings"
 )
 
@@ -51,7 +52,7 @@ func (s *Service) FindOrCreatePlayerByOAuth(ctx context.Context, provider, provi
 	isAdminEmail := cfg != nil && email == cfg.Admin.Email
 
 	player, err := s.repo.FindPlayerByEmail(ctx, email)
-	if err != nil {
+	if err != nil && errors.GetType(err) != errors.ErrorTypeNotFound {
 		logger.Error("Database error checking for player by email", "error", err)
 		return nil, fmt.Errorf("database error: %w", err)
 	}
@@ -69,7 +70,7 @@ func (s *Service) FindOrCreatePlayerByOAuth(ctx context.Context, provider, provi
 		return player, nil
 	}
 
-	logger.Info("Creating new player with OAuth provider")
+	logger.Info("No existing player found, creating new player with OAuth provider")
 	username := s.generateUsernameFromEmail(email)
 
 	if isAdminEmail && cfg != nil {
