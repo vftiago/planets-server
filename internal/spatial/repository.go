@@ -2,10 +2,11 @@ package spatial
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"planets-server/internal/shared/database"
+
+	"github.com/lib/pq"
 )
 
 type Repository struct {
@@ -56,29 +57,51 @@ func (r *Repository) CreateEntitiesBatch(ctx context.Context, entities []BatchIn
 	)
 	logger.Debug("Creating spatial entities in batch")
 
-	// Convert entities to JSON
-	entitiesJSON, err := json.Marshal(entities)
-	if err != nil {
-		logger.Error("Failed to marshal entities to JSON", "error", err)
-		return nil, fmt.Errorf("failed to marshal entities: %w", err)
+	// Build arrays for each column
+	gameIDs := make([]int, len(entities))
+	parentIDs := make([]*int, len(entities))
+	entityTypes := make([]string, len(entities))
+	levels := make([]int, len(entities))
+	xCoords := make([]int, len(entities))
+	yCoords := make([]int, len(entities))
+	names := make([]string, len(entities))
+	descriptions := make([]string, len(entities))
+
+	for i, entity := range entities {
+		gameIDs[i] = entity.GameID
+		parentIDs[i] = entity.ParentID
+		entityTypes[i] = string(entity.EntityType)
+		levels[i] = entity.Level
+		xCoords[i] = entity.XCoord
+		yCoords[i] = entity.YCoord
+		names[i] = entity.Name
+		descriptions[i] = entity.Description
 	}
 
 	query := `
 		INSERT INTO spatial_entities (game_id, parent_id, entity_type, level, x_coord, y_coord, name, description, child_count)
 		SELECT
-			(data->>'GameID')::integer,
-			(data->>'ParentID')::integer,
-			(data->>'EntityType')::entity_type,
-			(data->>'Level')::integer,
-			(data->>'XCoord')::integer,
-			(data->>'YCoord')::integer,
-			data->>'Name',
-			data->>'Description',
+			unnest($1::int[]),
+			unnest($2::int[]),
+			unnest($3::entity_type[]),
+			unnest($4::int[]),
+			unnest($5::int[]),
+			unnest($6::int[]),
+			unnest($7::text[]),
+			unnest($8::text[]),
 			0
-		FROM json_array_elements($1::json) AS data
 		RETURNING id`
 
-	rows, err := exec.QueryContext(ctx, query, string(entitiesJSON))
+	rows, err := exec.QueryContext(ctx, query,
+		pq.Array(gameIDs),
+		pq.Array(parentIDs),
+		pq.Array(entityTypes),
+		pq.Array(levels),
+		pq.Array(xCoords),
+		pq.Array(yCoords),
+		pq.Array(names),
+		pq.Array(descriptions),
+	)
 	if err != nil {
 		logger.Error("Failed to batch create spatial entities", "error", err)
 		return nil, fmt.Errorf("failed to batch create spatial entities: %w", err)
