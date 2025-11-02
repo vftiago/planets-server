@@ -29,7 +29,7 @@ func NewService(
 }
 
 func (s *Service) CreateGame(ctx context.Context, config GameConfig, universeConfig UniverseConfig) (*Game, error) {
-	if err := s.deleteExistingGames(ctx); err != nil {
+	if err := s.gameRepo.DeleteAllGames(ctx); err != nil {
 		return nil, fmt.Errorf("failed to delete existing games: %w", err)
 	}
 
@@ -76,29 +76,6 @@ func (s *Service) GetAllGames(ctx context.Context) ([]Game, error) {
 
 func (s *Service) GetGameStats(ctx context.Context, gameID int) (*GameStats, error) {
 	return s.gameRepo.GetGameStats(ctx, gameID)
-}
-
-func (s *Service) deleteExistingGames(ctx context.Context) error {
-	existingGames, err := s.gameRepo.GetAllGames(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get existing games: %w", err)
-	}
-
-	if len(existingGames) == 0 {
-		return nil
-	}
-
-	for _, game := range existingGames {
-		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("game deletion cancelled: %w", err)
-		}
-
-		if err := s.gameRepo.DeleteGame(ctx, game.ID); err != nil {
-			return fmt.Errorf("failed to delete existing game %d: %w", game.ID, err)
-		}
-	}
-
-	return nil
 }
 
 func (s *Service) generateUniverse(ctx context.Context, gameID int, config UniverseConfig, tx *database.Tx) error {

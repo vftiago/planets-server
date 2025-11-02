@@ -225,6 +225,15 @@ func (r *Repository) DeleteGame(ctx context.Context, gameID int) error {
 	return nil
 }
 
+func (r *Repository) DeleteAllGames(ctx context.Context) error {
+	query := `DELETE FROM games`
+	_, err := r.db.ExecContext(ctx, query)
+	if err != nil {
+		return errors.WrapInternal("failed to delete all games", err)
+	}
+	return nil
+}
+
 func (r *Repository) UpdateGameCounts(ctx context.Context, gameID int, planetCount int, tx *database.Tx) error {
 	exec := r.getExecutor(tx)
 
