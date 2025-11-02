@@ -2,20 +2,15 @@ package auth
 
 import (
 	"context"
-	"log/slog"
 )
 
 type Service struct {
-	repo   *Repository
-	logger *slog.Logger
+	repo *Repository
 }
 
-func NewService(repo *Repository, logger *slog.Logger) *Service {
-	logger.Debug("Initializing auth service")
-
+func NewService(repo *Repository) *Service {
 	return &Service{
-		repo:   repo,
-		logger: logger,
+		repo: repo,
 	}
 }
 

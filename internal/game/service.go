@@ -2,7 +2,6 @@ package game
 
 import (
 	"context"
-	"fmt"
 
 	"planets-server/internal/planet"
 	"planets-server/internal/shared/database"
@@ -29,8 +28,10 @@ func NewService(
 }
 
 func (s *Service) CreateGame(ctx context.Context, config GameConfig, universeConfig UniverseConfig) (*Game, error) {
+	// Development constraint: only one game allowed at a time
+	// TODO: Remove this when implementing multi-game support
 	if err := s.gameRepo.DeleteAllGames(ctx); err != nil {
-		return nil, fmt.Errorf("failed to delete existing games: %w", err)
+		return nil, errors.WrapInternal("failed to delete existing games", err)
 	}
 
 	tx, err := s.gameRepo.db.BeginTxContext(ctx)
@@ -46,16 +47,16 @@ func (s *Service) CreateGame(ctx context.Context, config GameConfig, universeCon
 
 	game, err := s.gameRepo.CreateGame(ctx, config, tx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create game: %w", err)
+		return nil, errors.WrapInternal("failed to create game", err)
 	}
 
 	err = s.generateUniverse(ctx, game.ID, universeConfig, tx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate universe: %w", err)
+		return nil, errors.WrapInternal("failed to generate universe", err)
 	}
 
 	if err := s.gameRepo.ActivateGame(ctx, game.ID, tx); err != nil {
-		return nil, fmt.Errorf("failed to activate game: %w", err)
+		return nil, errors.WrapInternal("failed to activate game", err)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -64,7 +65,7 @@ func (s *Service) CreateGame(ctx context.Context, config GameConfig, universeCon
 
 	updatedGame, err := s.gameRepo.GetGameByID(ctx, game.ID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to reload game after creation: %w", err)
+		return nil, errors.WrapInternal("failed to reload game after creation", err)
 	}
 
 	return updatedGame, nil
@@ -85,7 +86,7 @@ func (s *Service) generateUniverse(ctx context.Context, gameID int, config Unive
 
 	for i, level := range plan {
 		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("universe generation cancelled: %w", err)
+			return errors.WrapInternal("universe generation cancelled", err)
 		}
 
 		var parentIDs []*int
@@ -111,7 +112,7 @@ func (s *Service) generateUniverse(ctx context.Context, gameID int, config Unive
 			tx,
 		)
 		if err != nil {
-			return fmt.Errorf("failed to generate %s: %w", level.EntityType, err)
+			return errors.WrapInternal("failed to generate spatial entities", err)
 		}
 	}
 
@@ -126,12 +127,12 @@ func (s *Service) generateUniverse(ctx context.Context, gameID int, config Unive
 		tx,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to generate planets: %w", err)
+		return errors.WrapInternal("failed to generate planets", err)
 	}
 
 	err = s.gameRepo.UpdateGameCounts(ctx, gameID, totalPlanets, tx)
 	if err != nil {
-		return fmt.Errorf("failed to update game counts: %w", err)
+		return errors.WrapInternal("failed to update game counts", err)
 	}
 
 	return nil

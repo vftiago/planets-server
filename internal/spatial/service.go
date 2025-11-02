@@ -2,36 +2,24 @@ package spatial
 
 import (
 	"context"
-	"fmt"
-	"log/slog"
 	"math"
 	"planets-server/internal/shared/database"
+	"planets-server/internal/shared/errors"
 )
 
 type Service struct {
-	repo   *Repository
-	logger *slog.Logger
+	repo *Repository
 }
 
-func NewService(repo *Repository, logger *slog.Logger) *Service {
+func NewService(repo *Repository) *Service {
 	return &Service{
-		repo:   repo,
-		logger: logger,
+		repo: repo,
 	}
 }
 
 // GenerateEntities generates entities for one or more parent entities in a single batch operation
 // Returns only the IDs of created entities to minimize memory usage
 func (s *Service) GenerateEntities(ctx context.Context, gameID int, parentIDs []*int, entityType EntityType, countPerParent int, tx *database.Tx) ([]int, error) {
-	logger := s.logger.With(
-		"operation", "generate_entities",
-		"type", entityType,
-		"parent_count", len(parentIDs),
-		"count_per_parent", countPerParent,
-		"game_id", gameID,
-	)
-	logger.Debug("Generating spatial entities")
-
 	if len(parentIDs) == 0 {
 		return []int{}, nil
 	}
@@ -50,8 +38,7 @@ func (s *Service) GenerateEntities(ctx context.Context, gameID int, parentIDs []
 	for _, parentID := range parentIDs {
 		// Check for context cancellation
 		if err := ctx.Err(); err != nil {
-			logger.Warn("Context cancelled during entity generation", "error", err)
-			return nil, fmt.Errorf("entity generation cancelled: %w", err)
+			return nil, errors.WrapInternal("spatial entity generation cancelled", err)
 		}
 
 		nameIndex := 0
@@ -88,14 +75,9 @@ func (s *Service) GenerateEntities(ctx context.Context, gameID int, parentIDs []
 	// Perform single batch insert for all entities across all parents
 	entityIDs, err := s.repo.CreateEntitiesBatch(ctx, batchRequests, tx)
 	if err != nil {
-		logger.Error("Failed to batch create entities", "error", err)
-		return nil, fmt.Errorf("failed to batch create %s: %w", entityType, err)
+		return nil, errors.WrapInternal("failed to batch create spatial entities", err)
 	}
 
-	logger.Info("Entities generated",
-		"total_count", len(entityIDs),
-		"parent_count", len(parentIDs),
-		"avg_per_parent", len(entityIDs)/len(parentIDs))
 	return entityIDs, nil
 }
 

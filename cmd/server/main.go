@@ -75,10 +75,10 @@ func main() {
 	spatialRepo := spatial.NewRepository(db, logger)
 	planetRepo := planet.NewRepository(db, logger)
 
-	authService := auth.NewService(authRepo, logger)
-	playerService := player.NewService(playerRepo, logger)
-	spatialService := spatial.NewService(spatialRepo, logger)
-	planetService := planet.NewService(planetRepo, logger)
+	authService := auth.NewService(authRepo)
+	playerService := player.NewService(playerRepo)
+	spatialService := spatial.NewService(spatialRepo)
+	planetService := planet.NewService(planetRepo)
 
 	gameRepo := game.NewRepository(db)
 	gameService := game.NewService(gameRepo, spatialService, planetService)

@@ -3,22 +3,18 @@ package planet
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"math/rand"
 	"planets-server/internal/shared/database"
+	"planets-server/internal/shared/errors"
 )
 
 type Service struct {
-	repo   *Repository
-	logger *slog.Logger
+	repo *Repository
 }
 
-func NewService(repo *Repository, logger *slog.Logger) *Service {
-	logger.Debug("Initializing planet service")
-
+func NewService(repo *Repository) *Service {
 	return &Service{
-		repo:   repo,
-		logger: logger,
+		repo: repo,
 	}
 }
 
@@ -60,15 +56,6 @@ func (s *Service) generateRandomPlanetType() PlanetType {
 }
 
 func (s *Service) GeneratePlanets(ctx context.Context, systemIDs []int, minPlanets, maxPlanets int, tx *database.Tx) (int, error) {
-	logger := s.logger.With(
-		"component", "planet_service",
-		"operation", "generate_planets_for_systems",
-		"system_count", len(systemIDs),
-		"min_planets", minPlanets,
-		"max_planets", maxPlanets,
-	)
-	logger.Debug("Generating planets for multiple systems")
-
 	if len(systemIDs) == 0 {
 		return 0, nil
 	}
@@ -80,8 +67,7 @@ func (s *Service) GeneratePlanets(ctx context.Context, systemIDs []int, minPlane
 	for _, systemID := range systemIDs {
 		// Check for context cancellation
 		if err := ctx.Err(); err != nil {
-			logger.Warn("Context cancelled during planet generation for systems", "error", err)
-			return 0, fmt.Errorf("planet generation cancelled: %w", err)
+			return 0, errors.WrapInternal("planet generation cancelled", err)
 		}
 
 		planetCount := minPlanets + rand.Intn(maxPlanets-minPlanets+1)
@@ -102,16 +88,13 @@ func (s *Service) GeneratePlanets(ctx context.Context, systemIDs []int, minPlane
 
 	// Perform batch insert for all planets
 	if len(batchRequests) == 0 {
-		logger.Info("No planets to generate")
 		return 0, nil
 	}
 
 	planets, err := s.repo.CreatePlanetsBatch(ctx, batchRequests, tx)
 	if err != nil {
-		logger.Error("Failed to batch create planets", "error", err)
-		return 0, fmt.Errorf("failed to batch create planets: %w", err)
+		return 0, errors.WrapInternal("failed to batch create planets", err)
 	}
 
-	logger.Info("Planets generated for all systems", "total_planets", len(planets), "system_count", len(systemIDs))
 	return len(planets), nil
 }
