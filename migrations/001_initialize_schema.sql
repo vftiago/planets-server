@@ -128,6 +128,9 @@ CREATE INDEX idx_planets_owner_id ON planets(owner_id);
 CREATE INDEX idx_game_players_game_id ON game_players(game_id);
 CREATE INDEX idx_game_players_player_id ON game_players(player_id);
 CREATE INDEX idx_player_stats_game_player ON player_stats(game_id, player_id);
+CREATE INDEX idx_games_planet_count ON games(planet_count) WHERE planet_count > 0;
+CREATE INDEX idx_spatial_entities_game_type ON spatial_entities(game_id, entity_type);
+CREATE INDEX idx_planets_type ON planets(type);
 
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
