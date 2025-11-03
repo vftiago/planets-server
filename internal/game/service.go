@@ -34,7 +34,7 @@ func (s *Service) CreateGame(ctx context.Context, config GameConfig, universeCon
 		return nil, errors.WrapInternal("failed to delete existing games", err)
 	}
 
-	tx, err := s.gameRepo.db.BeginTxContext(ctx)
+	tx, err := s.gameRepo.db.BeginTx(ctx)
 	if err != nil {
 		return nil, errors.WrapInternal("failed to begin transaction for game creation", err)
 	}
