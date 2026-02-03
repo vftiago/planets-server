@@ -221,15 +221,21 @@ func (h *Handler) GetEntity(w http.ResponseWriter, r *http.Request) {
 - `internal/shared/errors/errors.go` - Custom error types
 - `internal/shared/response/error.go` - HTTP error response helper
 
-### ✅ Repositories
-- `internal/player/repository.go`
+### ✅ Repositories (5/5 - All Complete)
 - `internal/auth/repository.go`
 - `internal/game/repository.go`
+- `internal/planet/repository.go`
+- `internal/player/repository.go`
+- `internal/spatial/repository.go`
 
-### ✅ Services
+### ✅ Services (5/5 - All Complete)
+- `internal/auth/service.go`
 - `internal/game/service.go`
+- `internal/planet/service.go`
+- `internal/player/service.go`
+- `internal/spatial/service.go`
 
-### ✅ Handlers
+### ✅ Handlers (1/8)
 - `internal/game/handlers/game.go`
 
 ### ✅ Main
@@ -237,38 +243,15 @@ func (h *Handler) GetEntity(w http.ResponseWriter, r *http.Request) {
 
 ## Remaining Work
 
-### Repositories to Refactor
-Apply the repository pattern to:
-- `internal/spatial/repository.go`
-- `internal/planet/repository.go`
-- `internal/universe/repository.go` (if exists)
-
-**Steps:**
-1. Remove logger field and all logger calls
-2. Replace `nil, nil` returns with `errors.NotFoundf()`
-3. Replace `fmt.Errorf()` with `errors.WrapInternal()`
-4. Use `errors.Validation()` for invalid input
-
-### Services to Refactor
-Apply the service pattern to:
-- `internal/player/service.go`
-- `internal/auth/service.go`
-- `internal/spatial/service.go`
-- `internal/planet/service.go`
-
-**Steps:**
-1. Remove logger field from struct
-2. Remove logger parameter from NewService
-3. Remove all logger calls
-4. Keep error wrapping with business context
-5. Update all calling code to remove logger parameter
-
-### Handlers to Refactor
+### Handlers to Refactor (7 remaining)
 Apply the handler pattern to:
-- `internal/player/handlers/*.go`
-- `internal/auth/handlers/*.go`
-- `internal/game/handlers/status.go`
-- `internal/server/handlers/*.go`
+- `internal/game/handlers/status.go` - uses `http.Error()`
+- `internal/player/handlers/me.go` - uses `http.Error()`
+- `internal/player/handlers/players.go` - uses `http.Error()`
+- `internal/auth/handlers/google.go` - uses custom `sendErrorResponse()`
+- `internal/auth/handlers/github.go` - uses custom `sendErrorResponse()`
+- `internal/auth/handlers/utils.go` - contains duplicate `sendErrorResponse()`, can be removed after refactoring
+- `internal/server/handlers/health.go` - uses `http.Error()`
 
 **Steps:**
 1. Replace `http.Error()` with `response.Error()`
@@ -276,6 +259,7 @@ Apply the handler pattern to:
 3. Create validation errors with `errors.Validation()`
 4. Remove `nil` checking (use error types instead)
 5. Keep only one logger declaration per handler
+6. For auth handlers: replace custom `sendErrorResponse()` with `response.Error()`
 
 ## Testing
 

@@ -2,23 +2,19 @@ package spatial
 
 import (
 	"context"
-	"fmt"
-	"log/slog"
 	"planets-server/internal/shared/database"
+	"planets-server/internal/shared/errors"
 
 	"github.com/lib/pq"
 )
 
 type Repository struct {
-	db     *database.DB
-	logger *slog.Logger
+	db *database.DB
 }
 
-func NewRepository(db *database.DB, logger *slog.Logger) *Repository {
-	logger.Debug("Initializing spatial repository")
+func NewRepository(db *database.DB) *Repository {
 	return &Repository{
-		db:     db,
-		logger: logger,
+		db: db,
 	}
 }
 
@@ -49,13 +45,6 @@ func (r *Repository) CreateEntitiesBatch(ctx context.Context, entities []BatchIn
 	}
 
 	exec := r.getExecutor(tx)
-
-	logger := r.logger.With(
-		"component", "spatial_repository",
-		"operation", "create_entities_batch",
-		"count", len(entities),
-	)
-	logger.Debug("Creating spatial entities in batch")
 
 	// Build arrays for each column
 	gameIDs := make([]int, len(entities))
@@ -103,31 +92,23 @@ func (r *Repository) CreateEntitiesBatch(ctx context.Context, entities []BatchIn
 		pq.Array(descriptions),
 	)
 	if err != nil {
-		logger.Error("Failed to batch create spatial entities", "error", err)
-		return nil, fmt.Errorf("failed to batch create spatial entities: %w", err)
+		return nil, errors.WrapInternal("failed to batch create spatial entities", err)
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			logger.Error("Failed to close rows", "error", err)
-		}
-	}()
+	defer rows.Close()
 
 	var entityIDs []int
 	for rows.Next() {
 		var id int
 		err := rows.Scan(&id)
 		if err != nil {
-			logger.Error("Failed to scan entity ID", "error", err)
-			return nil, fmt.Errorf("failed to scan entity ID: %w", err)
+			return nil, errors.WrapInternal("failed to scan entity ID", err)
 		}
 		entityIDs = append(entityIDs, id)
 	}
 
 	if err := rows.Err(); err != nil {
-		logger.Error("Error during rows iteration", "error", err)
-		return nil, fmt.Errorf("error iterating entity IDs: %w", err)
+		return nil, errors.WrapInternal("error iterating entity IDs", err)
 	}
 
-	logger.Info("Spatial entities batch created successfully", "count", len(entityIDs))
 	return entityIDs, nil
 }

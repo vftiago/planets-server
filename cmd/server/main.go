@@ -72,8 +72,8 @@ func main() {
 
 	authRepo := auth.NewRepository(db)
 	playerRepo := player.NewRepository(db)
-	spatialRepo := spatial.NewRepository(db, logger)
-	planetRepo := planet.NewRepository(db, logger)
+	spatialRepo := spatial.NewRepository(db)
+	planetRepo := planet.NewRepository(db)
 
 	authService := auth.NewService(authRepo)
 	playerService := player.NewService(playerRepo)

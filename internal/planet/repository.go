@@ -3,22 +3,17 @@ package planet
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"log/slog"
 	"planets-server/internal/shared/database"
+	"planets-server/internal/shared/errors"
 )
 
 type Repository struct {
-	db     *database.DB
-	logger *slog.Logger
+	db *database.DB
 }
 
-func NewRepository(db *database.DB, logger *slog.Logger) *Repository {
-	logger.Debug("Initializing planet repository")
-
+func NewRepository(db *database.DB) *Repository {
 	return &Repository{
-		db:     db,
-		logger: logger,
+		db: db,
 	}
 }
 
@@ -47,18 +42,10 @@ func (r *Repository) CreatePlanetsBatch(ctx context.Context, planets []BatchInse
 
 	exec := r.getExecutor(tx)
 
-	logger := r.logger.With(
-		"component", "planet_repository",
-		"operation", "create_planets_batch",
-		"count", len(planets),
-	)
-	logger.Debug("Creating planets in batch")
-
 	// Convert planets to JSON
 	planetsJSON, err := json.Marshal(planets)
 	if err != nil {
-		logger.Error("Failed to marshal planets to JSON", "error", err)
-		return nil, fmt.Errorf("failed to marshal planets: %w", err)
+		return nil, errors.WrapInternal("failed to marshal planets", err)
 	}
 
 	query := `
@@ -77,14 +64,9 @@ func (r *Repository) CreatePlanetsBatch(ctx context.Context, planets []BatchInse
 
 	rows, err := exec.QueryContext(ctx, query, string(planetsJSON))
 	if err != nil {
-		logger.Error("Failed to batch create planets", "error", err)
-		return nil, fmt.Errorf("failed to batch create planets: %w", err)
+		return nil, errors.WrapInternal("failed to batch create planets", err)
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			logger.Error("Failed to close rows", "error", err)
-		}
-	}()
+	defer rows.Close()
 
 	var createdPlanets []Planet
 	for rows.Next() {
@@ -103,17 +85,14 @@ func (r *Repository) CreatePlanetsBatch(ctx context.Context, planets []BatchInse
 			&planet.UpdatedAt,
 		)
 		if err != nil {
-			logger.Error("Failed to scan planet row", "error", err)
-			return nil, fmt.Errorf("failed to scan planet: %w", err)
+			return nil, errors.WrapInternal("failed to scan planet", err)
 		}
 		createdPlanets = append(createdPlanets, planet)
 	}
 
 	if err := rows.Err(); err != nil {
-		logger.Error("Error during rows iteration", "error", err)
-		return nil, fmt.Errorf("error iterating planets: %w", err)
+		return nil, errors.WrapInternal("error iterating planets", err)
 	}
 
-	logger.Info("Planets batch created successfully", "count", len(createdPlanets))
 	return createdPlanets, nil
 }
