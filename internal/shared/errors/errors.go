@@ -93,6 +93,31 @@ func WrapInternal(message string, err error) error {
 	}
 }
 
+// Unauthorized creates an unauthorized error
+func Unauthorized(message string) error {
+	return &AppError{
+		Type:    ErrorTypeUnauthorized,
+		Message: message,
+	}
+}
+
+// External creates an external service error
+func External(message string) error {
+	return &AppError{
+		Type:    ErrorTypeExternal,
+		Message: message,
+	}
+}
+
+// WrapExternal wraps an error as an external service error
+func WrapExternal(message string, err error) error {
+	return &AppError{
+		Type:    ErrorTypeExternal,
+		Message: message,
+		Err:     err,
+	}
+}
+
 // GetType returns the error type of an error
 func GetType(err error) ErrorType {
 	var appErr *AppError

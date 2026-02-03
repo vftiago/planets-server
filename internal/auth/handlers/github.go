@@ -14,6 +14,7 @@ import (
 	"planets-server/internal/shared/config"
 	"planets-server/internal/shared/cookies"
 	"planets-server/internal/shared/errors"
+	"planets-server/internal/shared/response"
 )
 
 type GitHubAuthHandler struct {
@@ -33,33 +34,20 @@ func NewGitHubAuthHandler(provider *providers.GitHubProvider, playerService *pla
 }
 
 func (h *GitHubAuthHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
-	logger := slog.With(
-		"handler", "github_oauth_init",
-		"user_agent", r.UserAgent(),
-		"ip", r.RemoteAddr,
-	)
+	logger := slog.With("handler", "github_oauth_init")
 
 	if !h.isConfigured {
-		logger.Error("GitHub OAuth not configured - missing client credentials")
-		sendErrorResponse(w, http.StatusServiceUnavailable,
-			"oauth_not_configured", "GitHub OAuth is not properly configured")
+		response.Error(w, r, logger, errors.External("GitHub OAuth is not properly configured"))
 		return
 	}
 
 	state, err := auth.GenerateOAuthState("github", r.UserAgent())
 	if err != nil {
-		logger.Error("Failed to generate state token", "error", err)
-		sendErrorResponse(w, http.StatusInternalServerError,
-			"internal_error", "Failed to initialize OAuth flow")
+		response.Error(w, r, logger, errors.WrapInternal("failed to initialize OAuth flow", err))
 		return
 	}
 
 	url := h.provider.GetAuthURL(state)
-
-	logger.Info("Initiating GitHub OAuth flow",
-		"redirect_url", url,
-		"state_length", len(state))
-
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 

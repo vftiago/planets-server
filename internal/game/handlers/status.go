@@ -1,11 +1,12 @@
 package handlers
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 
 	"planets-server/internal/player"
+	"planets-server/internal/shared/errors"
+	"planets-server/internal/shared/response"
 )
 
 type GameStatusResponse struct {
@@ -24,28 +25,19 @@ func NewGameStatusHandler(playerService *player.Service) *GameStatusHandler {
 
 func (h *GameStatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	logger := slog.With("handler", "game_status", "remote_addr", r.RemoteAddr)
-	logger.Debug("Game status requested")
-
-	w.Header().Set("Content-Type", "application/json")
+	logger := slog.With("handler", "game_status")
 
 	playerCount, err := h.playerService.GetPlayerCount(ctx)
 	if err != nil {
-		logger.Warn("Failed to get player count", "error", err)
-		playerCount = 0
+		response.Error(w, r, logger, errors.WrapInternal("failed to get player count", err))
+		return
 	}
 
-	response := GameStatusResponse{
+	resp := GameStatusResponse{
 		Game:          "Planets!",
 		Turn:          1,
 		OnlinePlayers: playerCount,
 	}
 
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		logger.Error("Failed to encode game status response", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	logger.Debug("Game status completed", "player_count", playerCount)
+	response.Success(w, http.StatusOK, resp)
 }

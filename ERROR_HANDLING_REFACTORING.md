@@ -235,31 +235,22 @@ func (h *Handler) GetEntity(w http.ResponseWriter, r *http.Request) {
 - `internal/player/service.go`
 - `internal/spatial/service.go`
 
-### ✅ Handlers (1/8)
+### ✅ Handlers (8/8 - All Complete)
+- `internal/auth/handlers/github.go`
+- `internal/auth/handlers/google.go`
+- `internal/auth/handlers/utils.go` - removed duplicate `sendErrorResponse()`, kept `redirectWithError()` for OAuth flows
 - `internal/game/handlers/game.go`
+- `internal/game/handlers/status.go`
+- `internal/player/handlers/me.go`
+- `internal/player/handlers/players.go`
+- `internal/server/handlers/health.go`
 
 ### ✅ Main
 - `cmd/server/main.go` - Updated service initialization
 
-## Remaining Work
+## Refactoring Complete
 
-### Handlers to Refactor (7 remaining)
-Apply the handler pattern to:
-- `internal/game/handlers/status.go` - uses `http.Error()`
-- `internal/player/handlers/me.go` - uses `http.Error()`
-- `internal/player/handlers/players.go` - uses `http.Error()`
-- `internal/auth/handlers/google.go` - uses custom `sendErrorResponse()`
-- `internal/auth/handlers/github.go` - uses custom `sendErrorResponse()`
-- `internal/auth/handlers/utils.go` - contains duplicate `sendErrorResponse()`, can be removed after refactoring
-- `internal/server/handlers/health.go` - uses `http.Error()`
-
-**Steps:**
-1. Replace `http.Error()` with `response.Error()`
-2. Replace JSON encoding with `response.Success()`
-3. Create validation errors with `errors.Validation()`
-4. Remove `nil` checking (use error types instead)
-5. Keep only one logger declaration per handler
-6. For auth handlers: replace custom `sendErrorResponse()` with `response.Error()`
+All components have been refactored to use the new error handling pattern.
 
 ## Testing
 

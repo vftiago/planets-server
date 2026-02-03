@@ -1,11 +1,12 @@
 package handlers
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 
 	"planets-server/internal/middleware"
+	"planets-server/internal/shared/errors"
+	"planets-server/internal/shared/response"
 )
 
 type MeHandler struct{}
@@ -15,37 +16,20 @@ func NewMeHandler() *MeHandler {
 }
 
 func (h *MeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	logger := slog.With("handler", "me")
+
 	claims := middleware.GetUserFromContext(r)
 	if claims == nil {
-		logger := slog.With("handler", "me", "remote_addr", r.RemoteAddr)
-		logger.Error("No user claims found in context")
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		response.Error(w, r, logger, errors.Unauthorized("no user claims found in context"))
 		return
 	}
 
-	logger := slog.With(
-		"handler", "me",
-		"remote_addr", r.RemoteAddr,
-		"player_id", claims.PlayerID,
-		"username", claims.Username,
-		"role", claims.Role,
-	)
-	logger.Debug("User info requested")
-
-	w.Header().Set("Content-Type", "application/json")
-
-	response := map[string]interface{}{
+	resp := map[string]interface{}{
 		"player_id": claims.PlayerID,
 		"username":  claims.Username,
 		"email":     claims.Email,
 		"role":      claims.Role,
 	}
 
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		logger.Error("Failed to encode user info response", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	logger.Debug("User info completed")
+	response.Success(w, http.StatusOK, resp)
 }
