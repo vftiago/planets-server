@@ -67,13 +67,13 @@ func (h *DiscordAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reque
 		logger.Warn("Discord OAuth authorization denied",
 			"oauth_error", errorParam,
 			"error_description", r.URL.Query().Get("error_description"))
-		redirectWithError(w, r, "oauth_denied", "Authorization was denied")
+		redirectWithError(w, r, "oauth_denied")
 		return
 	}
 
 	if code == "" {
 		logger.Error("Discord OAuth callback missing authorization code")
-		redirectWithError(w, r, "oauth_error", "Missing authorization code")
+		redirectWithError(w, r, "oauth_error")
 		return
 	}
 
@@ -82,7 +82,7 @@ func (h *DiscordAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reque
 			"error", err,
 			"provider", "discord",
 			"state", state)
-		redirectWithError(w, r, "oauth_error", "Invalid request state - possible CSRF attack")
+		redirectWithError(w, r, "oauth_error")
 		return
 	}
 
@@ -96,7 +96,7 @@ func (h *DiscordAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reque
 		logger.Error("Failed to exchange Discord authorization code",
 			"error", err,
 			"provider", "discord")
-		redirectWithError(w, r, "oauth_error", "Failed to exchange authorization code")
+		redirectWithError(w, r, "oauth_error")
 		return
 	}
 
@@ -106,7 +106,7 @@ func (h *DiscordAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reque
 		logger.Error("Failed to get user info from Discord",
 			"error", err,
 			"provider", "discord")
-		redirectWithError(w, r, "oauth_error", "Failed to retrieve user information")
+		redirectWithError(w, r, "oauth_error")
 		return
 	}
 
@@ -117,7 +117,7 @@ func (h *DiscordAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reque
 
 	if userInfo.Email == "" || !userInfo.Verified {
 		userLogger.Error("Discord user missing verified email")
-		redirectWithError(w, r, "oauth_error", "A verified email address is required")
+		redirectWithError(w, r, "oauth_error")
 		return
 	}
 
@@ -126,7 +126,7 @@ func (h *DiscordAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reque
 	existingPlayerID, err := h.authService.FindPlayerByAuthProvider(ctx, "discord", userInfo.ID)
 	if err != nil && errors.GetType(err) != errors.ErrorTypeNotFound {
 		userLogger.Error("Database error checking auth provider", "error", err)
-		redirectWithError(w, r, "database_error", "Failed to authenticate user")
+		redirectWithError(w, r, "database_error")
 		return
 	}
 
@@ -136,7 +136,7 @@ func (h *DiscordAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reque
 		player, err = h.playerService.GetPlayerByID(ctx, existingPlayerID)
 		if err != nil {
 			userLogger.Error("Failed to get existing player", "error", err)
-			redirectWithError(w, r, "database_error", "Failed to get user account")
+			redirectWithError(w, r, "database_error")
 			return
 		}
 	} else {
@@ -152,7 +152,7 @@ func (h *DiscordAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reque
 		)
 		if err != nil {
 			userLogger.Error("Failed to create player", "error", err)
-			redirectWithError(w, r, "database_error", "Failed to create user account")
+			redirectWithError(w, r, "database_error")
 			return
 		}
 
@@ -160,7 +160,7 @@ func (h *DiscordAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reque
 		err = h.authService.CreateAuthProvider(ctx, player.ID, "discord", userInfo.ID, userInfo.Email)
 		if err != nil {
 			userLogger.Error("Failed to create auth provider link", "error", err)
-			redirectWithError(w, r, "database_error", "Failed to link account")
+			redirectWithError(w, r, "database_error")
 			return
 		}
 	}
@@ -171,7 +171,7 @@ func (h *DiscordAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reque
 	jwtToken, err := auth.GenerateJWT(player.ID, player.Username, player.Email, player.Role.String())
 	if err != nil {
 		playerLogger.Error("Failed to generate JWT token", "error", err)
-		redirectWithError(w, r, "auth_error", "Failed to create authentication token")
+		redirectWithError(w, r, "auth_error")
 		return
 	}
 

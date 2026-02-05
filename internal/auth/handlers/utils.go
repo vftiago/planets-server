@@ -7,11 +7,10 @@ import (
 	"planets-server/internal/shared/config"
 )
 
-// redirectWithError redirects to frontend with error parameters
-func redirectWithError(w http.ResponseWriter, r *http.Request, errorType, message string) {
+// redirectWithError redirects to frontend with an error code
+func redirectWithError(w http.ResponseWriter, r *http.Request, errorCode string) {
 	cfg := config.GlobalConfig
-	errorURL := fmt.Sprintf("%s/auth/error?error=%s&message=%s",
-		cfg.Frontend.URL, errorType, message)
+	errorURL := fmt.Sprintf("%s/auth/error?error=%s", cfg.Frontend.URL, errorCode)
 
 	http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
 }
