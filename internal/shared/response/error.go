@@ -41,6 +41,8 @@ func mapErrorTypeToStatusCode(errorType errors.ErrorType) int {
 		return http.StatusUnauthorized
 	case errors.ErrorTypeForbidden:
 		return http.StatusForbidden
+	case errors.ErrorTypeMethodNotAllowed:
+		return http.StatusMethodNotAllowed
 	case errors.ErrorTypeExternal:
 		return http.StatusServiceUnavailable
 	case errors.ErrorTypeInternal:

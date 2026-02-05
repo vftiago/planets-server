@@ -24,7 +24,7 @@ func (h *GameHandler) CreateGame(w http.ResponseWriter, r *http.Request) {
 	logger := slog.With("handler", "create_game")
 
 	if r.Method != http.MethodPost {
-		response.Error(w, r, logger, errors.Validation("method not allowed"))
+		response.Error(w, r, logger, errors.MethodNotAllowed(r.Method))
 		return
 	}
 
@@ -86,7 +86,7 @@ func (h *GameHandler) GetGames(w http.ResponseWriter, r *http.Request) {
 	logger := slog.With("handler", "get_games")
 
 	if r.Method != http.MethodGet {
-		response.Error(w, r, logger, errors.Validation("method not allowed"))
+		response.Error(w, r, logger, errors.MethodNotAllowed(r.Method))
 		return
 	}
 
@@ -108,7 +108,7 @@ func (h *GameHandler) GetGameStats(w http.ResponseWriter, r *http.Request) {
 	logger := slog.With("handler", "get_game_stats")
 
 	if r.Method != http.MethodGet {
-		response.Error(w, r, logger, errors.Validation("method not allowed"))
+		response.Error(w, r, logger, errors.MethodNotAllowed(r.Method))
 		return
 	}
 

@@ -21,6 +21,8 @@ const (
 	ErrorTypeForbidden ErrorType = "forbidden"
 	// ErrorTypeInternal indicates an internal server error
 	ErrorTypeInternal ErrorType = "internal"
+	// ErrorTypeMethodNotAllowed indicates an unsupported HTTP method
+	ErrorTypeMethodNotAllowed ErrorType = "method_not_allowed"
 	// ErrorTypeExternal indicates an external service error
 	ErrorTypeExternal ErrorType = "external"
 )
@@ -98,6 +100,14 @@ func Unauthorized(message string) error {
 	return &AppError{
 		Type:    ErrorTypeUnauthorized,
 		Message: message,
+	}
+}
+
+// MethodNotAllowed creates a method not allowed error
+func MethodNotAllowed(method string) error {
+	return &AppError{
+		Type:    ErrorTypeMethodNotAllowed,
+		Message: fmt.Sprintf("method %s not allowed", method),
 	}
 }
 
