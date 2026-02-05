@@ -112,7 +112,7 @@ func (h *GameHandler) GetGameStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	gameIDStr := r.URL.Query().Get("id")
+	gameIDStr := r.PathValue("id")
 	if gameIDStr == "" {
 		response.Error(w, r, logger, errors.Validation("game ID is required"))
 		return
