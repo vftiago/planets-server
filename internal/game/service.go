@@ -28,12 +28,6 @@ func NewService(
 }
 
 func (s *Service) CreateGame(ctx context.Context, config GameConfig, universeConfig UniverseConfig) (*Game, error) {
-	// Development constraint: only one game allowed at a time
-	// TODO: Remove this when implementing multi-game support
-	if err := s.gameRepo.DeleteAllGames(ctx); err != nil {
-		return nil, errors.WrapInternal("failed to delete existing games", err)
-	}
-
 	tx, err := s.gameRepo.db.BeginTx(ctx)
 	if err != nil {
 		return nil, errors.WrapInternal("failed to begin transaction for game creation", err)
@@ -44,6 +38,12 @@ func (s *Service) CreateGame(ctx context.Context, config GameConfig, universeCon
 			_ = tx.Rollback()
 		}
 	}()
+
+	// Development constraint: only one game allowed at a time
+	// TODO: Remove this when implementing multi-game support
+	if err := s.gameRepo.DeleteAllGames(ctx, tx); err != nil {
+		return nil, errors.WrapInternal("failed to delete existing games", err)
+	}
 
 	game, err := s.gameRepo.CreateGame(ctx, config, tx)
 	if err != nil {
