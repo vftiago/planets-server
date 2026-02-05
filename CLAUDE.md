@@ -56,11 +56,13 @@ internal/
   │   ├── handlers/
   │   │   ├── google.go         # Google OAuth handler
   │   │   ├── github.go         # GitHub OAuth handler
+  │   │   ├── discord.go        # Discord OAuth handler
   │   │   ├── logout.go         # Logout handler
   │   │   └── utils.go          # Handler utilities (redirectWithError)
   │   ├── providers/
   │   │   ├── google.go         # Google OAuth provider
-  │   │   └── github.go         # GitHub OAuth provider
+  │   │   ├── github.go         # GitHub OAuth provider
+  │   │   └── discord.go        # Discord OAuth provider
   │   ├── models.go             # Auth-specific models (Claims, etc.)
   │   ├── repository.go         # Auth-specific database operations
   │   ├── service.go            # Auth business logic

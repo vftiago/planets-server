@@ -61,6 +61,12 @@ func (r *Routes) Setup() *http.ServeMux {
 		r.authService,
 		r.oauthConfig.GitHubConfigured,
 	)
+	discordAuthHandler := authHandlers.NewDiscordAuthHandler(
+		r.oauthConfig.DiscordProvider,
+		r.playerService,
+		r.authService,
+		r.oauthConfig.DiscordConfigured,
+	)
 
 	// Public endpoints
 	mux.Handle("/api/server/health", healthHandler)
@@ -80,13 +86,15 @@ func (r *Routes) Setup() *http.ServeMux {
 	mux.HandleFunc("/auth/google/callback", googleAuthHandler.HandleCallback)
 	mux.HandleFunc("/auth/github", githubAuthHandler.HandleAuth)
 	mux.HandleFunc("/auth/github/callback", githubAuthHandler.HandleCallback)
+	mux.HandleFunc("/auth/discord", discordAuthHandler.HandleAuth)
+	mux.HandleFunc("/auth/discord/callback", discordAuthHandler.HandleCallback)
 	mux.Handle("/auth/logout", logoutHandler)
 
 	logger.Info("Routes configured successfully",
 		"public_endpoints", []string{"/api/server/health", "/api/game/status", "/api/players", "/api/games", "/api/games/stats"},
 		"protected_endpoints", []string{"/api/players/me"},
 		"admin_endpoints", []string{"/api/games/create"},
-		"auth_endpoints", []string{"/auth/google", "/auth/github", "/auth/logout"},
+		"auth_endpoints", []string{"/auth/google", "/auth/github", "/auth/discord", "/auth/logout"},
 	)
 
 	return mux

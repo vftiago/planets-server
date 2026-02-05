@@ -61,8 +61,9 @@ type AuthConfig struct {
 }
 
 type OAuthConfig struct {
-	Google GoogleOAuthConfig
-	GitHub GitHubOAuthConfig
+	Google  GoogleOAuthConfig
+	GitHub  GitHubOAuthConfig
+	Discord DiscordOAuthConfig
 }
 
 type GoogleOAuthConfig struct {
@@ -73,6 +74,13 @@ type GoogleOAuthConfig struct {
 }
 
 type GitHubOAuthConfig struct {
+	ClientID     string
+	ClientSecret string
+	RedirectURL  string
+	Scopes       []string
+}
+
+type DiscordOAuthConfig struct {
 	ClientID     string
 	ClientSecret string
 	RedirectURL  string
@@ -227,6 +235,12 @@ func loadOAuthConfig() OAuthConfig {
 			RedirectURL:  serverURL + "/auth/github/callback",
 			Scopes:       []string{"user:email"},
 		},
+		Discord: DiscordOAuthConfig{
+			ClientID:     utils.GetEnv("DISCORD_CLIENT_ID", ""),
+			ClientSecret: utils.GetEnv("DISCORD_CLIENT_SECRET", ""),
+			RedirectURL:  serverURL + "/auth/discord/callback",
+			Scopes:       []string{"identify", "email"},
+		},
 	}
 }
 
@@ -319,6 +333,10 @@ func (c *Config) GoogleOAuthConfigured() bool {
 
 func (c *Config) GitHubOAuthConfigured() bool {
 	return c.OAuth.GitHub.ClientID != "" && c.OAuth.GitHub.ClientSecret != ""
+}
+
+func (c *Config) DiscordOAuthConfigured() bool {
+	return c.OAuth.Discord.ClientID != "" && c.OAuth.Discord.ClientSecret != ""
 }
 
 func (c *Config) ConnectionString() string {

@@ -11,12 +11,15 @@ import (
 )
 
 type OAuthConfig struct {
-	GitHubConfig     *oauth2.Config
-	GoogleConfig     *oauth2.Config
-	GitHubProvider   *providers.GitHubProvider
-	GoogleProvider   *providers.GoogleProvider
-	GitHubConfigured bool
-	GoogleConfigured bool
+	GitHubConfig      *oauth2.Config
+	GoogleConfig      *oauth2.Config
+	DiscordConfig     *oauth2.Config
+	GitHubProvider    *providers.GitHubProvider
+	GoogleProvider    *providers.GoogleProvider
+	DiscordProvider   *providers.DiscordProvider
+	GitHubConfigured  bool
+	GoogleConfigured  bool
+	DiscordConfigured bool
 }
 
 func InitOAuth() *OAuthConfig {
@@ -40,18 +43,30 @@ func InitOAuth() *OAuthConfig {
 		Endpoint:     google.Endpoint,
 	}
 
+	discordConfig := &oauth2.Config{
+		ClientID:     cfg.OAuth.Discord.ClientID,
+		ClientSecret: cfg.OAuth.Discord.ClientSecret,
+		RedirectURL:  cfg.OAuth.Discord.RedirectURL,
+		Scopes:       cfg.OAuth.Discord.Scopes,
+		Endpoint:     providers.DiscordEndpoint,
+	}
+
 	githubConfigured := cfg.GitHubOAuthConfigured()
 	googleConfigured := cfg.GoogleOAuthConfigured()
+	discordConfigured := cfg.DiscordOAuthConfigured()
 
 	githubProvider := providers.NewGitHubProvider(githubConfig)
 	googleProvider := providers.NewGoogleProvider(googleConfig)
+	discordProvider := providers.NewDiscordProvider(discordConfig)
 
 	logger.Info("OAuth configuration completed",
 		"server_url", cfg.Server.URL,
 		"github_configured", githubConfigured,
 		"google_configured", googleConfigured,
+		"discord_configured", discordConfigured,
 		"github_redirect", githubConfig.RedirectURL,
 		"google_redirect", googleConfig.RedirectURL,
+		"discord_redirect", discordConfig.RedirectURL,
 	)
 
 	if !githubConfigured {
@@ -60,13 +75,19 @@ func InitOAuth() *OAuthConfig {
 	if !googleConfigured {
 		logger.Warn("Google OAuth not configured - missing client credentials")
 	}
+	if !discordConfigured {
+		logger.Warn("Discord OAuth not configured - missing client credentials")
+	}
 
 	return &OAuthConfig{
-		GitHubConfig:     githubConfig,
-		GoogleConfig:     googleConfig,
-		GitHubProvider:   githubProvider,
-		GoogleProvider:   googleProvider,
-		GitHubConfigured: githubConfigured,
-		GoogleConfigured: googleConfigured,
+		GitHubConfig:      githubConfig,
+		GoogleConfig:      googleConfig,
+		DiscordConfig:     discordConfig,
+		GitHubProvider:    githubProvider,
+		GoogleProvider:    googleProvider,
+		DiscordProvider:   discordProvider,
+		GitHubConfigured:  githubConfigured,
+		GoogleConfigured:  googleConfigured,
+		DiscordConfigured: discordConfigured,
 	}
 }
