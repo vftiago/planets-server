@@ -110,7 +110,6 @@ type UniverseConfig struct {
 	SystemsPerSector    int
 	MinPlanetsPerSystem int
 	MaxPlanetsPerSystem int
-	DefaultGalaxyName   string
 }
 
 type AdminConfig struct {
@@ -291,7 +290,6 @@ func loadUniverseConfig() UniverseConfig {
 		SystemsPerSector:    systemsPerSector,
 		MinPlanetsPerSystem: minPlanets,
 		MaxPlanetsPerSystem: maxPlanets,
-		DefaultGalaxyName:   utils.GetEnv("UNIVERSE_DEFAULT_GALAXY_NAME", "Andromeda"),
 	}
 }
 
