@@ -72,8 +72,8 @@ func (r *Routes) Setup() *http.ServeMux {
 	mux.Handle("/api/server/health", healthHandler)
 	mux.Handle("/api/game/status", gameStatusHandler)
 	mux.Handle("/api/players", playersHandler)
-	mux.HandleFunc("/api/games", gameHandler.GetGames)
-	mux.HandleFunc("/api/games/{id}/stats", gameHandler.GetGameStats)
+	mux.Handle("/api/games", http.HandlerFunc(gameHandler.GetGames))
+	mux.Handle("/api/games/{id}/stats", http.HandlerFunc(gameHandler.GetGameStats))
 
 	// Protected endpoints (authenticated users)
 	mux.Handle("/api/players/me", middleware.JWTMiddleware(meHandler))
@@ -82,12 +82,12 @@ func (r *Routes) Setup() *http.ServeMux {
 	mux.Handle("/api/games/create", middleware.RequireAdmin(http.HandlerFunc(gameHandler.CreateGame)))
 
 	// OAuth endpoints
-	mux.HandleFunc("/auth/google", googleAuthHandler.HandleAuth)
-	mux.HandleFunc("/auth/google/callback", googleAuthHandler.HandleCallback)
-	mux.HandleFunc("/auth/github", githubAuthHandler.HandleAuth)
-	mux.HandleFunc("/auth/github/callback", githubAuthHandler.HandleCallback)
-	mux.HandleFunc("/auth/discord", discordAuthHandler.HandleAuth)
-	mux.HandleFunc("/auth/discord/callback", discordAuthHandler.HandleCallback)
+	mux.Handle("/auth/google", http.HandlerFunc(googleAuthHandler.HandleAuth))
+	mux.Handle("/auth/google/callback", http.HandlerFunc(googleAuthHandler.HandleCallback))
+	mux.Handle("/auth/github", http.HandlerFunc(githubAuthHandler.HandleAuth))
+	mux.Handle("/auth/github/callback", http.HandlerFunc(githubAuthHandler.HandleCallback))
+	mux.Handle("/auth/discord", http.HandlerFunc(discordAuthHandler.HandleAuth))
+	mux.Handle("/auth/discord/callback", http.HandlerFunc(discordAuthHandler.HandleCallback))
 	mux.Handle("/auth/logout", logoutHandler)
 
 	logger.Info("Routes configured successfully",
