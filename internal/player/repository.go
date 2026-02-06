@@ -36,7 +36,7 @@ func (r *Repository) GetAllPlayers(ctx context.Context) ([]Player, error) {
 	if err != nil {
 		return nil, errors.WrapInternal("failed to query players", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var players []Player
 	for rows.Next() {

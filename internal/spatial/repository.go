@@ -94,7 +94,7 @@ func (r *Repository) CreateEntitiesBatch(ctx context.Context, entities []BatchIn
 	if err != nil {
 		return nil, errors.WrapInternal("failed to batch create spatial entities", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var entityIDs []int
 	for rows.Next() {

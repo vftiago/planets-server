@@ -103,7 +103,7 @@ func (r *Repository) GetAllGames(ctx context.Context) ([]Game, error) {
 	if err != nil {
 		return nil, errors.WrapInternal("failed to query games", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var games []Game
 	for rows.Next() {

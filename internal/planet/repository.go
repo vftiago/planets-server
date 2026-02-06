@@ -66,7 +66,7 @@ func (r *Repository) CreatePlanetsBatch(ctx context.Context, planets []BatchInse
 	if err != nil {
 		return nil, errors.WrapInternal("failed to batch create planets", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var createdPlanets []Planet
 	for rows.Next() {

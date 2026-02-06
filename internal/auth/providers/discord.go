@@ -72,7 +72,7 @@ func (p *DiscordProvider) GetUserInfo(ctx context.Context, token *oauth2.Token) 
 		logger.Error("Discord API returned error status",
 			"status_code", resp.StatusCode,
 			"status", resp.Status)
-		return nil, fmt.Errorf("Discord API returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("discord API returned status %d", resp.StatusCode)
 	}
 
 	var userInfo DiscordUserInfo
@@ -83,7 +83,7 @@ func (p *DiscordProvider) GetUserInfo(ctx context.Context, token *oauth2.Token) 
 
 	if userInfo.ID == "" {
 		logger.Error("Discord user info missing user ID")
-		return nil, fmt.Errorf("Discord user info missing user ID")
+		return nil, fmt.Errorf("discord user info missing user ID")
 	}
 
 	logger.Debug("Successfully retrieved Discord user info",
