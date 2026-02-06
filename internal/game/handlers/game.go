@@ -33,6 +33,7 @@ func (h *GameHandler) CreateGame(w http.ResponseWriter, r *http.Request) {
 		Universe game.UniverseConfig `json:"universe"`
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		response.Error(w, r, logger, errors.WrapValidation("invalid JSON in request body", err))
 		return

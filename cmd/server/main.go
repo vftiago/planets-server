@@ -202,11 +202,12 @@ func createHTTPServer(handler http.Handler) *http.Server {
 	}
 
 	return &http.Server{
-		Addr:         port,
-		Handler:      handler,
-		ReadTimeout:  cfg.Server.ReadTimeout,
-		WriteTimeout: cfg.Server.WriteTimeout,
-		IdleTimeout:  cfg.Server.IdleTimeout,
+		Addr:           port,
+		Handler:        handler,
+		ReadTimeout:    cfg.Server.ReadTimeout,
+		WriteTimeout:   cfg.Server.WriteTimeout,
+		IdleTimeout:    cfg.Server.IdleTimeout,
+		MaxHeaderBytes: 1 << 20, // 1 MB
 	}
 }
 
