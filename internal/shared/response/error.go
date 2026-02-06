@@ -88,9 +88,14 @@ func logError(logger *slog.Logger, r *http.Request, err error, errorType errors.
 	}
 }
 
+func setCommonHeaders(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+}
+
 // sendErrorResponse sends a JSON error response to the client
 func sendErrorResponse(w http.ResponseWriter, errorType errors.ErrorType, message string, statusCode int) {
-	w.Header().Set("Content-Type", "application/json")
+	setCommonHeaders(w)
 	w.WriteHeader(statusCode)
 
 	response := ErrorResponse{
@@ -106,7 +111,7 @@ func sendErrorResponse(w http.ResponseWriter, errorType errors.ErrorType, messag
 
 // Success sends a JSON success response to the client
 func Success(w http.ResponseWriter, statusCode int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
+	setCommonHeaders(w)
 	w.WriteHeader(statusCode)
 
 	if data != nil {
