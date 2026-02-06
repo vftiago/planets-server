@@ -5,29 +5,19 @@ import (
 	"fmt"
 )
 
-// ErrorType represents the category of error
 type ErrorType string
 
 const (
-	// ErrorTypeNotFound indicates a resource was not found
-	ErrorTypeNotFound ErrorType = "not_found"
-	// ErrorTypeValidation indicates invalid input data
-	ErrorTypeValidation ErrorType = "validation"
-	// ErrorTypeConflict indicates a conflict with existing data
-	ErrorTypeConflict ErrorType = "conflict"
-	// ErrorTypeUnauthorized indicates authentication failure
-	ErrorTypeUnauthorized ErrorType = "unauthorized"
-	// ErrorTypeForbidden indicates insufficient permissions
-	ErrorTypeForbidden ErrorType = "forbidden"
-	// ErrorTypeInternal indicates an internal server error
-	ErrorTypeInternal ErrorType = "internal"
-	// ErrorTypeMethodNotAllowed indicates an unsupported HTTP method
+	ErrorTypeNotFound         ErrorType = "not_found"
+	ErrorTypeValidation       ErrorType = "validation"
+	ErrorTypeConflict         ErrorType = "conflict"
+	ErrorTypeUnauthorized     ErrorType = "unauthorized"
+	ErrorTypeForbidden        ErrorType = "forbidden"
+	ErrorTypeInternal         ErrorType = "internal"
 	ErrorTypeMethodNotAllowed ErrorType = "method_not_allowed"
-	// ErrorTypeExternal indicates an external service error
-	ErrorTypeExternal ErrorType = "external"
+	ErrorTypeExternal         ErrorType = "external"
 )
 
-// AppError is the base error type for application errors
 type AppError struct {
 	Type    ErrorType
 	Message string
@@ -45,7 +35,6 @@ func (e *AppError) Unwrap() error {
 	return e.Err
 }
 
-// NotFoundf creates a not found error with formatting
 func NotFoundf(format string, args ...interface{}) error {
 	return &AppError{
 		Type:    ErrorTypeNotFound,
@@ -53,7 +42,6 @@ func NotFoundf(format string, args ...interface{}) error {
 	}
 }
 
-// Validation creates a validation error
 func Validation(message string) error {
 	return &AppError{
 		Type:    ErrorTypeValidation,
@@ -61,7 +49,6 @@ func Validation(message string) error {
 	}
 }
 
-// Validationf creates a validation error with formatting
 func Validationf(format string, args ...interface{}) error {
 	return &AppError{
 		Type:    ErrorTypeValidation,
@@ -69,7 +56,6 @@ func Validationf(format string, args ...interface{}) error {
 	}
 }
 
-// WrapValidation wraps an error as a validation error
 func WrapValidation(message string, err error) error {
 	return &AppError{
 		Type:    ErrorTypeValidation,
@@ -78,7 +64,6 @@ func WrapValidation(message string, err error) error {
 	}
 }
 
-// Conflictf creates a conflict error with formatting
 func Conflictf(format string, args ...interface{}) error {
 	return &AppError{
 		Type:    ErrorTypeConflict,
@@ -86,7 +71,6 @@ func Conflictf(format string, args ...interface{}) error {
 	}
 }
 
-// WrapInternal wraps an error as an internal error
 func WrapInternal(message string, err error) error {
 	return &AppError{
 		Type:    ErrorTypeInternal,
@@ -95,7 +79,6 @@ func WrapInternal(message string, err error) error {
 	}
 }
 
-// Unauthorized creates an unauthorized error
 func Unauthorized(message string) error {
 	return &AppError{
 		Type:    ErrorTypeUnauthorized,
@@ -103,7 +86,13 @@ func Unauthorized(message string) error {
 	}
 }
 
-// MethodNotAllowed creates a method not allowed error
+func Forbidden(message string) error {
+	return &AppError{
+		Type:    ErrorTypeForbidden,
+		Message: message,
+	}
+}
+
 func MethodNotAllowed(method string) error {
 	return &AppError{
 		Type:    ErrorTypeMethodNotAllowed,
@@ -111,7 +100,6 @@ func MethodNotAllowed(method string) error {
 	}
 }
 
-// External creates an external service error
 func External(message string) error {
 	return &AppError{
 		Type:    ErrorTypeExternal,
@@ -119,7 +107,6 @@ func External(message string) error {
 	}
 }
 
-// WrapExternal wraps an error as an external service error
 func WrapExternal(message string, err error) error {
 	return &AppError{
 		Type:    ErrorTypeExternal,
@@ -128,7 +115,6 @@ func WrapExternal(message string, err error) error {
 	}
 }
 
-// GetType returns the error type of an error
 func GetType(err error) ErrorType {
 	var appErr *AppError
 	if errors.As(err, &appErr) {

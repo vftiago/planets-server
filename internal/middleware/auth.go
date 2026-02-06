@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 	"planets-server/internal/auth"
+	"planets-server/internal/shared/errors"
+	"planets-server/internal/shared/response"
 )
 
 type contextKey string
@@ -24,16 +26,14 @@ func JWTMiddleware(next http.Handler) http.Handler {
 		// Get auth token from cookie
 		cookie, err := r.Cookie("auth_token")
 		if err != nil {
-			logger.Warn("No auth token cookie found", "error", err)
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			response.Error(w, r, logger, errors.Unauthorized("authentication required"))
 			return
 		}
 
 		// Validate JWT token
 		claims, err := auth.ValidateJWT(cookie.Value)
 		if err != nil {
-			logger.Warn("Invalid JWT token", "error", err)
-			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			response.Error(w, r, logger, errors.Unauthorized("invalid token"))
 			return
 		}
 

@@ -3,6 +3,8 @@ package middleware
 import (
 	"log/slog"
 	"net/http"
+	"planets-server/internal/shared/errors"
+	"planets-server/internal/shared/response"
 )
 
 func AdminMiddleware(next http.Handler) http.Handler {
@@ -17,8 +19,7 @@ func AdminMiddleware(next http.Handler) http.Handler {
 
 		claims := GetUserFromContext(r)
 		if claims == nil {
-			logger.Warn("No user context found in admin middleware")
-			http.Error(w, "Authentication required", http.StatusUnauthorized)
+			response.Error(w, r, logger, errors.Unauthorized("authentication required"))
 			return
 		}
 
@@ -27,7 +28,7 @@ func AdminMiddleware(next http.Handler) http.Handler {
 				"player_id", claims.PlayerID,
 				"username", claims.Username,
 				"role", claims.Role)
-			http.Error(w, "Admin access required", http.StatusForbidden)
+			response.Error(w, r, logger, errors.Forbidden("admin access required"))
 			return
 		}
 
