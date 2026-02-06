@@ -83,12 +83,15 @@ func main() {
 	gameRepo := game.NewRepository(db)
 	gameService := game.NewService(gameRepo, spatialService, planetService)
 
-	corsMiddleware := initCORS()
-	rateLimiter := initRateLimit()
+	cors := initCORS()
+	rateLimiter := initRateLimiter()
 
 	routes := server.NewRoutes(db, playerService, authService, gameService, oauthConfig, logger)
 	mux := routes.Setup()
-	handler := rateLimiter.Middleware(corsMiddleware.Handler(mux))
+
+	var handler http.Handler = mux
+	handler = rateLimiter.Middleware(handler)
+	handler = cors.Middleware(handler)
 
 	httpServer := createHTTPServer(handler)
 
@@ -158,17 +161,17 @@ func initCORS() *middleware.CORSMiddleware {
 	logger := slog.With("component", "cors", "operation", "setup")
 	logger.Debug("Setting up CORS middleware")
 
-	corsMiddleware := middleware.SetupCORS()
+	cors := middleware.NewCORS()
 
 	logger.Info("CORS middleware configured",
 		"allowed_origins", []string{cfg.Frontend.URL},
 		"debug_mode", cfg.Frontend.CORSDebug,
 	)
 
-	return corsMiddleware
+	return cors
 }
 
-func initRateLimit() *middleware.RateLimiter {
+func initRateLimiter() *middleware.RateLimiter {
 	cfg := config.GlobalConfig
 	logger := slog.With("component", "rate_limit", "operation", "init")
 	logger.Debug("Setting up rate limiting middleware")

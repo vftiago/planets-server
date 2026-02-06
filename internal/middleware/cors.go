@@ -12,7 +12,7 @@ type CORSMiddleware struct {
 	*cors.Cors
 }
 
-func SetupCORS() *CORSMiddleware {
+func NewCORS() *CORSMiddleware {
 	cfg := config.GlobalConfig
 	logger := slog.With("component", "cors", "operation", "setup")
 	logger.Debug("Setting up CORS middleware")
@@ -41,6 +41,6 @@ func SetupCORS() *CORSMiddleware {
 	return &CORSMiddleware{corsConfig}
 }
 
-func (c *CORSMiddleware) Handler(h http.Handler) http.Handler {
+func (c *CORSMiddleware) Middleware(h http.Handler) http.Handler {
 	return c.Cors.Handler(h)
 }
