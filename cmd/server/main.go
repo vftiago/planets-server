@@ -180,6 +180,7 @@ func initRateLimiter() *middleware.RateLimiter {
 		Enabled:           cfg.RateLimit.Enabled,
 		RequestsPerSecond: cfg.RateLimit.RequestsPerSecond,
 		BurstSize:         cfg.RateLimit.BurstSize,
+		TrustProxy:        cfg.RateLimit.TrustProxy,
 	}
 
 	rateLimiter := middleware.NewRateLimiter(rateLimitConfig)

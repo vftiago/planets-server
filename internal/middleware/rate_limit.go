@@ -2,7 +2,9 @@ package middleware
 
 import (
 	"log/slog"
+	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,6 +15,7 @@ type RateLimitConfig struct {
 	RequestsPerSecond float64
 	BurstSize         int
 	Enabled           bool
+	TrustProxy        bool
 }
 
 type RateLimiter struct {
@@ -73,7 +76,7 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		ip := getClientIP(r)
+		ip := getClientIP(r, rl.config.TrustProxy)
 		limiter := rl.getLimiter(ip)
 
 		logger := slog.With(
@@ -99,17 +102,25 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-func getClientIP(r *http.Request) string {
-	// Check X-Forwarded-For header first (for proxies)
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		return xff
+func getClientIP(r *http.Request, trustProxy bool) string {
+	if trustProxy {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			// X-Forwarded-For can be comma-separated; first entry is the client
+			if i := strings.IndexByte(xff, ','); i != -1 {
+				return strings.TrimSpace(xff[:i])
+			}
+			return xff
+		}
+
+		if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			return xri
+		}
 	}
 
-	// Check X-Real-IP header (for some proxies/load balancers)
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return xri
+	// Strip port from RemoteAddr (e.g. "192.168.1.1:12345" -> "192.168.1.1")
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
 	}
-
-	// Fall back to remote address
-	return r.RemoteAddr
+	return host
 }

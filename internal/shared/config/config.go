@@ -102,6 +102,7 @@ type RateLimitConfig struct {
 	Enabled           bool
 	RequestsPerSecond float64
 	BurstSize         int
+	TrustProxy        bool
 }
 
 type UniverseConfig struct {
@@ -269,10 +270,13 @@ func loadRateLimitConfig() RateLimitConfig {
 	requestsPerSecond, _ := strconv.ParseFloat(utils.GetEnv("RATE_LIMIT_REQUESTS_PER_SECOND", "10"), 64)
 	burstSize, _ := strconv.Atoi(utils.GetEnv("RATE_LIMIT_BURST_SIZE", "20"))
 
+	trustProxy := utils.GetEnv("RATE_LIMIT_TRUST_PROXY", "false") == "true"
+
 	return RateLimitConfig{
 		Enabled:           enabled,
 		RequestsPerSecond: requestsPerSecond,
 		BurstSize:         burstSize,
+		TrustProxy:        trustProxy,
 	}
 }
 
@@ -287,7 +291,7 @@ func loadUniverseConfig() UniverseConfig {
 		SystemsPerSector:    systemsPerSector,
 		MinPlanetsPerSystem: minPlanets,
 		MaxPlanetsPerSystem: maxPlanets,
-		DefaultGalaxyName:   utils.GetEnv("UNIVERSE_DEFAULT_GALAXY_NAME", "Milky Way"),
+		DefaultGalaxyName:   utils.GetEnv("UNIVERSE_DEFAULT_GALAXY_NAME", "Andromeda"),
 	}
 }
 
