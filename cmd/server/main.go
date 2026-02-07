@@ -177,7 +177,6 @@ func initRateLimiter() *middleware.RateLimiter {
 	logger.Debug("Setting up rate limiting middleware")
 
 	rateLimitConfig := middleware.RateLimitConfig{
-		Enabled:           cfg.RateLimit.Enabled,
 		RequestsPerSecond: cfg.RateLimit.RequestsPerSecond,
 		BurstSize:         cfg.RateLimit.BurstSize,
 		TrustProxy:        cfg.RateLimit.TrustProxy,
@@ -186,7 +185,6 @@ func initRateLimiter() *middleware.RateLimiter {
 	rateLimiter := middleware.NewRateLimiter(rateLimitConfig)
 
 	logger.Info("Rate limiting middleware configured",
-		"enabled", rateLimitConfig.Enabled,
 		"requests_per_second", rateLimitConfig.RequestsPerSecond,
 		"burst_size", rateLimitConfig.BurstSize,
 	)

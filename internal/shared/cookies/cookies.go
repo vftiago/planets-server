@@ -34,7 +34,7 @@ func createAuthCookie() *http.Cookie {
 		Domain:   extractDomain(cfg.Frontend.URL),
 		HttpOnly: true,
 		Secure:   cfg.Auth.CookieSecure,
-		SameSite: parseSameSite(cfg.Auth.CookieSameSite),
+		SameSite: cfg.Auth.CookieSameSite,
 	}
 }
 
@@ -52,15 +52,3 @@ func extractDomain(frontendURL string) string {
 	return host
 }
 
-func parseSameSite(sameSiteStr string) http.SameSite {
-	switch sameSiteStr {
-	case "strict":
-		return http.SameSiteStrictMode
-	case "lax":
-		return http.SameSiteLaxMode
-	case "none":
-		return http.SameSiteNoneMode
-	default:
-		return http.SameSiteLaxMode
-	}
-}

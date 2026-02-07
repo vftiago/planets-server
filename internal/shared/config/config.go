@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/http"
 	"planets-server/internal/shared/utils"
 	"strconv"
 	"time"
@@ -28,7 +29,6 @@ type RedisConfig struct {
 	Host     string
 	Port     string
 	Password string
-	DB       int
 }
 
 type ServerConfig struct {
@@ -50,14 +50,13 @@ type DatabaseConfig struct {
 	MaxOpenConns    int
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
-	MigrationsPath  string
 }
 
 type AuthConfig struct {
 	JWTSecret       string
 	TokenExpiration time.Duration
 	CookieSecure    bool
-	CookieSameSite  string
+	CookieSameSite  http.SameSite
 }
 
 type OAuthConfig struct {
@@ -94,12 +93,10 @@ type FrontendConfig struct {
 
 type LoggingConfig struct {
 	Level      string
-	Format     string
 	JSONFormat bool
 }
 
 type RateLimitConfig struct {
-	Enabled           bool
 	RequestsPerSecond float64
 	BurstSize         int
 	TrustProxy        bool
@@ -162,40 +159,27 @@ func load() (*Config, error) {
 
 func loadRedisConfig() RedisConfig {
 	enabled := utils.GetEnv("REDIS_ENABLED", "true") == "true"
-	redisURL := utils.GetEnv("REDIS_URL", "")
-
-	db, _ := strconv.Atoi(utils.GetEnv("REDIS_DB", "0"))
-
 	return RedisConfig{
 		Enabled:  enabled,
-		URL:      redisURL,
+		URL:      utils.GetEnv("REDIS_URL", ""),
 		Host:     utils.GetEnv("REDIS_HOST", "localhost"),
 		Port:     utils.GetEnv("REDIS_PORT", "6379"),
 		Password: utils.GetEnv("REDIS_PASSWORD", ""),
-		DB:       db,
 	}
 }
 
 func loadServerConfig() ServerConfig {
-	readTimeout, _ := strconv.Atoi(utils.GetEnv("SERVER_READ_TIMEOUT_SECONDS", "15"))
-	writeTimeout, _ := strconv.Atoi(utils.GetEnv("SERVER_WRITE_TIMEOUT_SECONDS", "15"))
-	idleTimeout, _ := strconv.Atoi(utils.GetEnv("SERVER_IDLE_TIMEOUT_SECONDS", "60"))
-
 	return ServerConfig{
 		Port:         utils.GetEnv("SERVER_PORT", "8080"),
 		URL:          utils.GetEnv("SERVER_URL", "http://localhost:8080"),
 		Environment:  utils.GetEnv("ENVIRONMENT", "development"),
-		ReadTimeout:  time.Duration(readTimeout) * time.Second,
-		WriteTimeout: time.Duration(writeTimeout) * time.Second,
-		IdleTimeout:  time.Duration(idleTimeout) * time.Second,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 }
 
 func loadDatabaseConfig() DatabaseConfig {
-	maxOpenConns, _ := strconv.Atoi(utils.GetEnv("DB_MAX_OPEN_CONNS", "25"))
-	maxIdleConns, _ := strconv.Atoi(utils.GetEnv("DB_MAX_IDLE_CONNS", "5"))
-	connMaxLifetime, _ := strconv.Atoi(utils.GetEnv("DB_CONN_MAX_LIFETIME_MINUTES", "5"))
-
 	return DatabaseConfig{
 		Host:            utils.GetEnv("DB_HOST", "localhost"),
 		Port:            utils.GetEnv("DB_PORT", "5432"),
@@ -203,10 +187,9 @@ func loadDatabaseConfig() DatabaseConfig {
 		Password:        utils.GetEnv("DB_PASSWORD", "postgres"),
 		Name:            utils.GetEnv("DB_NAME", "planets"),
 		SSLMode:         utils.GetEnv("DB_SSLMODE", "disable"),
-		MaxOpenConns:    maxOpenConns,
-		MaxIdleConns:    maxIdleConns,
-		ConnMaxLifetime: time.Duration(connMaxLifetime) * time.Minute,
-		MigrationsPath:  utils.GetEnv("DB_MIGRATIONS_PATH", "migrations"),
+		MaxOpenConns:    25,
+		MaxIdleConns:    5,
+		ConnMaxLifetime: 5 * time.Minute,
 	}
 }
 
@@ -216,11 +199,16 @@ func loadAuthConfig() AuthConfig {
 	environment := utils.GetEnv("ENVIRONMENT", "development")
 	cookieSecure := environment == "production"
 
+	cookieSameSite := http.SameSiteLaxMode
+	if environment == "production" {
+		cookieSameSite = http.SameSiteNoneMode
+	}
+
 	return AuthConfig{
 		JWTSecret:       utils.GetEnv("JWT_SECRET", ""),
 		TokenExpiration: time.Duration(tokenExpiration) * time.Hour,
 		CookieSecure:    cookieSecure,
-		CookieSameSite:  utils.GetEnv("COOKIE_SAME_SITE", "lax"),
+		CookieSameSite:  cookieSameSite,
 	}
 }
 
@@ -260,27 +248,20 @@ func loadFrontendConfig() FrontendConfig {
 
 func loadLoggingConfig() LoggingConfig {
 	environment := utils.GetEnv("ENVIRONMENT", "development")
-	jsonFormat := environment == "production"
 
 	return LoggingConfig{
 		Level:      utils.GetEnv("LOG_LEVEL", "debug"),
-		Format:     utils.GetEnv("LOG_FORMAT", "text"),
-		JSONFormat: jsonFormat,
+		JSONFormat: environment == "production",
 	}
 }
 
 func loadRateLimitConfig() RateLimitConfig {
-	enabled := utils.GetEnv("RATE_LIMIT_ENABLED", "true") == "true"
-	requestsPerSecond, _ := strconv.ParseFloat(utils.GetEnv("RATE_LIMIT_REQUESTS_PER_SECOND", "10"), 64)
-	burstSize, _ := strconv.Atoi(utils.GetEnv("RATE_LIMIT_BURST_SIZE", "20"))
-
-	trustProxy := utils.GetEnv("RATE_LIMIT_TRUST_PROXY", "false") == "true"
+	environment := utils.GetEnv("ENVIRONMENT", "development")
 
 	return RateLimitConfig{
-		Enabled:           enabled,
-		RequestsPerSecond: requestsPerSecond,
-		BurstSize:         burstSize,
-		TrustProxy:        trustProxy,
+		RequestsPerSecond: 10,
+		BurstSize:         20,
+		TrustProxy:        environment == "production",
 	}
 }
 

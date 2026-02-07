@@ -14,7 +14,6 @@ import (
 type RateLimitConfig struct {
 	RequestsPerSecond float64
 	BurstSize         int
-	Enabled           bool
 	TrustProxy        bool
 }
 
@@ -30,9 +29,7 @@ func NewRateLimiter(config RateLimitConfig) *RateLimiter {
 		clients: make(map[string]*rate.Limiter),
 	}
 
-	if config.Enabled {
-		go rl.cleanupClients()
-	}
+	go rl.cleanupClients()
 
 	return rl
 }
@@ -71,11 +68,6 @@ func (rl *RateLimiter) cleanupClients() {
 
 func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !rl.config.Enabled {
-			next.ServeHTTP(w, r)
-			return
-		}
-
 		ip := getClientIP(r, rl.config.TrustProxy)
 		limiter := rl.getLimiter(ip)
 
