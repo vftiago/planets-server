@@ -91,10 +91,10 @@ func (s *Service) GeneratePlanets(ctx context.Context, systemIDs []int, minPlane
 		return 0, nil
 	}
 
-	planets, err := s.repo.CreatePlanetsBatch(ctx, batchRequests, tx)
+	count, err := s.repo.CreatePlanetsBatch(ctx, batchRequests, tx)
 	if err != nil {
 		return 0, errors.WrapInternal("failed to batch create planets", err)
 	}
 
-	return len(planets), nil
+	return count, nil
 }

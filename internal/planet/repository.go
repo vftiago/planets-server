@@ -35,9 +35,9 @@ type BatchInsertRequest struct {
 }
 
 // CreatePlanetsBatch creates multiple planets in a single database operation using JSON
-func (r *Repository) CreatePlanetsBatch(ctx context.Context, planets []BatchInsertRequest, tx *database.Tx) ([]Planet, error) {
+func (r *Repository) CreatePlanetsBatch(ctx context.Context, planets []BatchInsertRequest, tx *database.Tx) (int, error) {
 	if len(planets) == 0 {
-		return []Planet{}, nil
+		return 0, nil
 	}
 
 	exec := r.getExecutor(tx)
@@ -45,7 +45,7 @@ func (r *Repository) CreatePlanetsBatch(ctx context.Context, planets []BatchInse
 	// Convert planets to JSON
 	planetsJSON, err := json.Marshal(planets)
 	if err != nil {
-		return nil, errors.WrapInternal("failed to marshal planets", err)
+		return 0, errors.WrapInternal("failed to marshal planets", err)
 	}
 
 	query := `
@@ -59,40 +59,17 @@ func (r *Repository) CreatePlanetsBatch(ctx context.Context, planets []BatchInse
 			0,
 			(data->>'MaxPopulation')::bigint,
 			NULL
-		FROM json_array_elements($1::json) AS data
-		RETURNING id, system_id, planet_index, name, type, size, population, max_population, owner_id, created_at, updated_at`
+		FROM json_array_elements($1::json) AS data`
 
-	rows, err := exec.QueryContext(ctx, query, string(planetsJSON))
+	result, err := exec.ExecContext(ctx, query, string(planetsJSON))
 	if err != nil {
-		return nil, errors.WrapInternal("failed to batch create planets", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var createdPlanets []Planet
-	for rows.Next() {
-		var planet Planet
-		err := rows.Scan(
-			&planet.ID,
-			&planet.SystemID,
-			&planet.PlanetIndex,
-			&planet.Name,
-			&planet.Type,
-			&planet.Size,
-			&planet.Population,
-			&planet.MaxPopulation,
-			&planet.OwnerID,
-			&planet.CreatedAt,
-			&planet.UpdatedAt,
-		)
-		if err != nil {
-			return nil, errors.WrapInternal("failed to scan planet", err)
-		}
-		createdPlanets = append(createdPlanets, planet)
+		return 0, errors.WrapInternal("failed to batch create planets", err)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, errors.WrapInternal("error iterating planets", err)
+	count, err := result.RowsAffected()
+	if err != nil {
+		return 0, errors.WrapInternal("failed to get rows affected", err)
 	}
 
-	return createdPlanets, nil
+	return int(count), nil
 }
