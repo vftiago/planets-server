@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"golang.org/x/oauth2"
 )
 
-type GitHubUserInfo struct {
+type githubAPIResponse struct {
 	ID        int    `json:"id"`
 	Email     string `json:"email"`
 	Name      string `json:"name"`
@@ -21,13 +22,31 @@ type GitHubProvider struct {
 	config *oauth2.Config
 }
 
-// NewGitHubProvider creates a new GitHub OAuth provider
 func NewGitHubProvider(config *oauth2.Config) *GitHubProvider {
 	return &GitHubProvider{config: config}
 }
 
-// GetUserInfo fetches user information from GitHub API
-func (p *GitHubProvider) GetUserInfo(ctx context.Context, token *oauth2.Token) (*GitHubUserInfo, error) {
+func (p *GitHubProvider) Name() string { return "github" }
+
+func (p *GitHubProvider) GetAuthURL(state string) string {
+	return p.config.AuthCodeURL(state, oauth2.AccessTypeOffline)
+}
+
+func (p *GitHubProvider) ExchangeCode(ctx context.Context, code string) (*oauth2.Token, error) {
+	logger := slog.With("provider", "github", "operation", "exchange_code")
+	logger.Debug("Exchanging authorization code for GitHub access token")
+
+	token, err := p.config.Exchange(ctx, code)
+	if err != nil {
+		logger.Error("Failed to exchange GitHub authorization code", "error", err)
+		return nil, fmt.Errorf("failed to exchange authorization code: %w", err)
+	}
+
+	logger.Debug("Successfully exchanged code for token")
+	return token, nil
+}
+
+func (p *GitHubProvider) GetUserInfo(ctx context.Context, token *oauth2.Token) (*OAuthUser, error) {
 	client := p.config.Client(ctx, token)
 
 	logger := slog.With("provider", "github", "operation", "get_user_info")
@@ -51,39 +70,45 @@ func (p *GitHubProvider) GetUserInfo(ctx context.Context, token *oauth2.Token) (
 		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
 	}
 
-	var userInfo GitHubUserInfo
-	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
+	var raw githubAPIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		logger.Error("Failed to decode GitHub user info", "error", err)
 		return nil, fmt.Errorf("failed to decode GitHub user info: %w", err)
 	}
 
-	// Validate required fields
-	if userInfo.ID == 0 {
+	if raw.ID == 0 {
 		logger.Error("GitHub user info missing user ID")
 		return nil, fmt.Errorf("GitHub user info missing user ID")
 	}
 
 	// GitHub might not return email in the user endpoint, try to get it
-	if userInfo.Email == "" {
+	emailVerified := true
+	if raw.Email == "" {
 		logger.Debug("GitHub user info missing email, attempting to fetch from emails endpoint")
-		if err := p.fetchUserEmail(ctx, client, &userInfo); err != nil {
+		if err := p.fetchUserEmail(client, &raw); err != nil {
 			logger.Warn("Failed to fetch GitHub user email", "error", err)
-			// Don't fail here - we'll validate email requirement in the caller
+			emailVerified = false
 		}
 	}
 
 	logger.Debug("Successfully retrieved GitHub user info",
-		"user_id", userInfo.ID,
-		"has_email", userInfo.Email != "",
-		"has_name", userInfo.Name != "",
-		"has_avatar", userInfo.AvatarURL != "")
+		"user_id", raw.ID,
+		"has_email", raw.Email != "",
+		"has_name", raw.Name != "",
+		"has_avatar", raw.AvatarURL != "")
 
-	return &userInfo, nil
+	return &OAuthUser{
+		ID:            strconv.Itoa(raw.ID),
+		Email:         raw.Email,
+		EmailVerified: emailVerified,
+		Name:          raw.Name,
+		AvatarURL:     raw.AvatarURL,
+	}, nil
 }
 
 // fetchUserEmail attempts to get the user's primary email from GitHub
-func (p *GitHubProvider) fetchUserEmail(ctx context.Context, client *http.Client, userInfo *GitHubUserInfo) error {
-	logger := slog.With("provider", "github", "operation", "fetch_email", "github_user_id", userInfo.ID)
+func (p *GitHubProvider) fetchUserEmail(client *http.Client, raw *githubAPIResponse) error {
+	logger := slog.With("provider", "github", "operation", "fetch_email", "github_user_id", raw.ID)
 
 	logger.Debug("Requesting email information from GitHub API")
 	emailResp, err := client.Get("https://api.github.com/user/emails")
@@ -120,7 +145,7 @@ func (p *GitHubProvider) fetchUserEmail(ctx context.Context, client *http.Client
 	// Find primary verified email
 	for _, email := range emails {
 		if email.Primary && email.Verified {
-			userInfo.Email = email.Email
+			raw.Email = email.Email
 			logger.Debug("Found primary verified email", "email", email.Email)
 			return nil
 		}
@@ -129,7 +154,7 @@ func (p *GitHubProvider) fetchUserEmail(ctx context.Context, client *http.Client
 	// Fallback to any verified email
 	for _, email := range emails {
 		if email.Verified {
-			userInfo.Email = email.Email
+			raw.Email = email.Email
 			logger.Debug("Found verified email (not primary)", "email", email.Email)
 			return nil
 		}
@@ -137,24 +162,4 @@ func (p *GitHubProvider) fetchUserEmail(ctx context.Context, client *http.Client
 
 	logger.Warn("No verified email found for GitHub user", "total_emails", len(emails))
 	return fmt.Errorf("no verified email found")
-}
-
-// ExchangeCode exchanges an authorization code for tokens
-func (p *GitHubProvider) ExchangeCode(ctx context.Context, code string) (*oauth2.Token, error) {
-	logger := slog.With("provider", "github", "operation", "exchange_code")
-	logger.Debug("Exchanging authorization code for GitHub access token")
-
-	token, err := p.config.Exchange(ctx, code)
-	if err != nil {
-		logger.Error("Failed to exchange GitHub authorization code", "error", err)
-		return nil, fmt.Errorf("failed to exchange authorization code: %w", err)
-	}
-
-	logger.Debug("Successfully exchanged code for token")
-	return token, nil
-}
-
-// GetAuthURL generates the OAuth authorization URL
-func (p *GitHubProvider) GetAuthURL(state string) string {
-	return p.config.AuthCodeURL(state, oauth2.AccessTypeOffline)
 }

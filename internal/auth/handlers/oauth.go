@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"time"
 
 	"planets-server/internal/auth"
@@ -17,15 +16,15 @@ import (
 	"planets-server/internal/shared/response"
 )
 
-type GitHubAuthHandler struct {
-	provider      *providers.GitHubProvider
+type OAuthHandler struct {
+	provider      providers.OAuthProvider
 	playerService *player.Service
 	authService   *auth.Service
 	isConfigured  bool
 }
 
-func NewGitHubAuthHandler(provider *providers.GitHubProvider, playerService *player.Service, authService *auth.Service, isConfigured bool) *GitHubAuthHandler {
-	return &GitHubAuthHandler{
+func NewOAuthHandler(provider providers.OAuthProvider, playerService *player.Service, authService *auth.Service, isConfigured bool) *OAuthHandler {
+	return &OAuthHandler{
 		provider:      provider,
 		playerService: playerService,
 		authService:   authService,
@@ -33,15 +32,16 @@ func NewGitHubAuthHandler(provider *providers.GitHubProvider, playerService *pla
 	}
 }
 
-func (h *GitHubAuthHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
-	logger := slog.With("handler", "github_oauth_init")
+func (h *OAuthHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
+	name := h.provider.Name()
+	logger := slog.With("handler", name+"_oauth_init")
 
 	if !h.isConfigured {
-		response.Error(w, r, logger, errors.External("GitHub OAuth is not properly configured"))
+		response.Error(w, r, logger, errors.External(fmt.Sprintf("%s OAuth is not properly configured", name)))
 		return
 	}
 
-	state, err := auth.GenerateOAuthState("github", r.UserAgent())
+	state, err := auth.GenerateOAuthState(name, r.UserAgent())
 	if err != nil {
 		response.Error(w, r, logger, errors.WrapInternal("failed to initialize OAuth flow", err))
 		return
@@ -51,13 +51,14 @@ func (h *GitHubAuthHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
-func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
+func (h *OAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
+	name := h.provider.Name()
 	code := r.URL.Query().Get("code")
 	state := r.URL.Query().Get("state")
 	errorParam := r.URL.Query().Get("error")
 
 	logger := slog.With(
-		"handler", "github_oauth_callback",
+		"handler", name+"_oauth_callback",
 		"user_agent", r.UserAgent(),
 		"ip", r.RemoteAddr,
 		"has_code", code != "",
@@ -65,7 +66,8 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 	)
 
 	if errorParam != "" {
-		logger.Warn("GitHub OAuth authorization denied",
+		logger.Warn("OAuth authorization denied",
+			"provider", name,
 			"oauth_error", errorParam,
 			"error_description", r.URL.Query().Get("error_description"))
 		redirectWithError(w, r, "oauth_denied")
@@ -73,70 +75,68 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 	}
 
 	if code == "" {
-		logger.Error("GitHub OAuth callback missing authorization code")
+		logger.Error("OAuth callback missing authorization code", "provider", name)
 		redirectWithError(w, r, "oauth_error")
 		return
 	}
 
-	if err := auth.ValidateOAuthState(state, "github", r.UserAgent()); err != nil {
+	if err := auth.ValidateOAuthState(state, name, r.UserAgent()); err != nil {
 		logger.Error("OAuth state validation failed",
 			"error", err,
-			"provider", "github",
+			"provider", name,
 			"state", state)
 		redirectWithError(w, r, "oauth_error")
 		return
 	}
 
-	logger.Info("OAuth state validation successful - proceeding with GitHub OAuth callback")
+	logger.Info("OAuth state validation successful - proceeding with OAuth callback", "provider", name)
 
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
 	token, err := h.provider.ExchangeCode(ctx, code)
 	if err != nil {
-		logger.Error("Failed to exchange GitHub authorization code",
+		logger.Error("Failed to exchange authorization code",
 			"error", err,
-			"provider", "github")
+			"provider", name)
 		redirectWithError(w, r, "oauth_error")
 		return
 	}
 
-	logger.Debug("Fetching user information from GitHub API")
+	logger.Debug("Fetching user information from provider API", "provider", name)
 	userInfo, err := h.provider.GetUserInfo(ctx, token)
 	if err != nil {
-		logger.Error("Failed to get user info from GitHub",
+		logger.Error("Failed to get user info",
 			"error", err,
-			"provider", "github")
+			"provider", name)
 		redirectWithError(w, r, "oauth_error")
 		return
 	}
 
 	userLogger := logger.With(
 		"user_email", userInfo.Email,
-		"github_user_id", userInfo.ID,
+		"provider_user_id", userInfo.ID,
 		"user_name", userInfo.Name)
 
-	if userInfo.Email == "" {
-		userLogger.Error("GitHub user info missing required email field")
+	if userInfo.Email == "" || !userInfo.EmailVerified {
+		userLogger.Error("User missing verified email", "provider", name)
 		redirectWithError(w, r, "oauth_error")
 		return
 	}
 
-	userLogger.Info("Creating or finding player account for GitHub user")
+	userLogger.Info("Creating or finding player account", "provider", name)
 
-	githubUserID := strconv.Itoa(userInfo.ID)
-
-	existingPlayerID, err := h.authService.FindPlayerByAuthProvider(ctx, "github", githubUserID)
+	existingPlayerID, err := h.authService.FindPlayerByAuthProvider(ctx, name, userInfo.ID)
 	if err != nil && errors.GetType(err) != errors.ErrorTypeNotFound {
 		userLogger.Error("Database error checking auth provider", "error", err)
 		redirectWithError(w, r, "database_error")
 		return
 	}
 
-	var player *player.Player
+	var p *player.Player
 	if existingPlayerID > 0 {
 		userLogger.Debug("Found existing player via OAuth provider")
-		player, err = h.playerService.GetPlayerByID(ctx, existingPlayerID)
+		p, err = h.playerService.GetPlayerByID(ctx, existingPlayerID)
 		if err != nil {
 			userLogger.Error("Failed to get existing player", "error", err)
 			redirectWithError(w, r, "database_error")
@@ -144,10 +144,10 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 		}
 	} else {
 		userLogger.Debug("No existing OAuth link found, finding or creating player by email")
-		player, err = h.playerService.FindOrCreatePlayerByOAuth(
+		p, err = h.playerService.FindOrCreatePlayerByOAuth(
 			ctx,
-			"github",
-			githubUserID,
+			name,
+			userInfo.ID,
 			userInfo.Email,
 			userInfo.Name,
 			&userInfo.AvatarURL,
@@ -159,7 +159,7 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 		}
 
 		userLogger.Debug("Linking OAuth provider to player account")
-		err = h.authService.CreateAuthProvider(ctx, player.ID, "github", githubUserID, userInfo.Email)
+		err = h.authService.CreateAuthProvider(ctx, p.ID, name, userInfo.ID, userInfo.Email)
 		if err != nil {
 			userLogger.Error("Failed to create auth provider link", "error", err)
 			redirectWithError(w, r, "database_error")
@@ -167,10 +167,10 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	playerLogger := userLogger.With("player_id", player.ID)
+	playerLogger := userLogger.With("player_id", p.ID)
 
 	playerLogger.Debug("Generating JWT token for player")
-	jwtToken, err := auth.GenerateJWT(player.ID, player.Username, player.Email, player.Role.String())
+	jwtToken, err := auth.GenerateJWT(p.ID, p.Username, p.Email, p.Role.String())
 	if err != nil {
 		playerLogger.Error("Failed to generate JWT token", "error", err)
 		redirectWithError(w, r, "auth_error")
@@ -179,10 +179,10 @@ func (h *GitHubAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Reques
 
 	cookies.SetAuthCookie(w, jwtToken)
 
-	playerLogger.Info("GitHub OAuth authentication successful",
-		"provider", "github",
-		"player_username", player.Username,
-		"player_role", player.Role)
+	playerLogger.Info("OAuth authentication successful",
+		"provider", name,
+		"player_username", p.Username,
+		"player_role", p.Role)
 
 	cfg := config.GlobalConfig
 	successURL := fmt.Sprintf("%s/auth/callback?success=true", cfg.Frontend.URL)

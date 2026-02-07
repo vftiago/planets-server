@@ -49,19 +49,19 @@ func (r *Routes) Setup() *http.ServeMux {
 
 	gameHandler := gameHandlers.NewGameHandler(r.gameService)
 
-	googleAuthHandler := authHandlers.NewGoogleAuthHandler(
+	googleAuthHandler := authHandlers.NewOAuthHandler(
 		r.oauthConfig.GoogleProvider,
 		r.playerService,
 		r.authService,
 		r.oauthConfig.GoogleConfigured,
 	)
-	githubAuthHandler := authHandlers.NewGitHubAuthHandler(
+	githubAuthHandler := authHandlers.NewOAuthHandler(
 		r.oauthConfig.GitHubProvider,
 		r.playerService,
 		r.authService,
 		r.oauthConfig.GitHubConfigured,
 	)
-	discordAuthHandler := authHandlers.NewDiscordAuthHandler(
+	discordAuthHandler := authHandlers.NewOAuthHandler(
 		r.oauthConfig.DiscordProvider,
 		r.playerService,
 		r.authService,

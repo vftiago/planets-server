@@ -11,14 +11,11 @@ import (
 )
 
 type OAuthConfig struct {
-	GitHubConfig      *oauth2.Config
-	GoogleConfig      *oauth2.Config
-	DiscordConfig     *oauth2.Config
-	GitHubProvider    *providers.GitHubProvider
-	GoogleProvider    *providers.GoogleProvider
-	DiscordProvider   *providers.DiscordProvider
-	GitHubConfigured  bool
+	GoogleProvider    providers.OAuthProvider
+	GitHubProvider    providers.OAuthProvider
+	DiscordProvider   providers.OAuthProvider
 	GoogleConfigured  bool
+	GitHubConfigured  bool
 	DiscordConfigured bool
 }
 
@@ -55,10 +52,6 @@ func InitOAuth() *OAuthConfig {
 	googleConfigured := cfg.GoogleOAuthConfigured()
 	discordConfigured := cfg.DiscordOAuthConfigured()
 
-	githubProvider := providers.NewGitHubProvider(githubConfig)
-	googleProvider := providers.NewGoogleProvider(googleConfig)
-	discordProvider := providers.NewDiscordProvider(discordConfig)
-
 	logger.Info("OAuth configuration completed",
 		"server_url", cfg.Server.URL,
 		"github_configured", githubConfigured,
@@ -80,14 +73,11 @@ func InitOAuth() *OAuthConfig {
 	}
 
 	return &OAuthConfig{
-		GitHubConfig:      githubConfig,
-		GoogleConfig:      googleConfig,
-		DiscordConfig:     discordConfig,
-		GitHubProvider:    githubProvider,
-		GoogleProvider:    googleProvider,
-		DiscordProvider:   discordProvider,
-		GitHubConfigured:  githubConfigured,
+		GoogleProvider:    providers.NewGoogleProvider(googleConfig),
+		GitHubProvider:    providers.NewGitHubProvider(githubConfig),
+		DiscordProvider:   providers.NewDiscordProvider(discordConfig),
 		GoogleConfigured:  googleConfigured,
+		GitHubConfigured:  githubConfigured,
 		DiscordConfigured: discordConfigured,
 	}
 }
