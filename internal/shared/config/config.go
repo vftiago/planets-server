@@ -28,7 +28,6 @@ type RedisConfig struct {
 	Host     string
 	Port     string
 	Password string
-	DB       int
 }
 
 type ServerConfig struct {
@@ -162,17 +161,12 @@ func load() (*Config, error) {
 
 func loadRedisConfig() RedisConfig {
 	enabled := utils.GetEnv("REDIS_ENABLED", "true") == "true"
-	redisURL := utils.GetEnv("REDIS_URL", "")
-
-	db, _ := strconv.Atoi(utils.GetEnv("REDIS_DB", "0"))
-
 	return RedisConfig{
 		Enabled:  enabled,
-		URL:      redisURL,
+		URL:      utils.GetEnv("REDIS_URL", ""),
 		Host:     utils.GetEnv("REDIS_HOST", "localhost"),
 		Port:     utils.GetEnv("REDIS_PORT", "6379"),
 		Password: utils.GetEnv("REDIS_PASSWORD", ""),
-		DB:       db,
 	}
 }
 

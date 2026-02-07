@@ -107,7 +107,6 @@ REDIS_URL=                           # If set, used instead of host/port/passwor
 REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_PASSWORD=
-REDIS_DB=0
 ```
 
 #### Rate limiting

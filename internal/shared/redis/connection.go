@@ -37,13 +37,11 @@ func Connect() (*Client, error) {
 	} else {
 		logger.Debug("Connecting to Redis using host/port",
 			"host", cfg.Host,
-			"port", cfg.Port,
-			"db", cfg.DB)
+			"port", cfg.Port)
 
 		rdb = redis.NewClient(&redis.Options{
-			Addr:         fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
-			Password:     cfg.Password,
-			DB:           cfg.DB,
+			Addr:     fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
+			Password: cfg.Password,
 			DialTimeout:  5 * time.Second,
 			ReadTimeout:  3 * time.Second,
 			WriteTimeout: 3 * time.Second,
