@@ -157,18 +157,7 @@ func initDatabase() (*database.DB, error) {
 }
 
 func initCORS() *middleware.CORSMiddleware {
-	cfg := config.GlobalConfig
-	logger := slog.With("component", "cors", "operation", "setup")
-	logger.Debug("Setting up CORS middleware")
-
-	cors := middleware.NewCORS()
-
-	logger.Info("CORS middleware configured",
-		"allowed_origins", []string{cfg.Frontend.URL},
-		"debug_mode", cfg.Frontend.CORSDebug,
-	)
-
-	return cors
+	return middleware.NewCORS()
 }
 
 func initRateLimiter() *middleware.RateLimiter {

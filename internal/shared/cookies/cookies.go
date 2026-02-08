@@ -31,7 +31,7 @@ func createAuthCookie() *http.Cookie {
 	return &http.Cookie{
 		Name:     "auth_token",
 		Path:     "/",
-		Domain:   extractDomain(cfg.Frontend.URL),
+		Domain:   extractDomain(cfg.Frontend.ClientURL),
 		HttpOnly: true,
 		Secure:   cfg.Auth.CookieSecure,
 		SameSite: cfg.Auth.CookieSameSite,

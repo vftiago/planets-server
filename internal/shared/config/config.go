@@ -87,7 +87,8 @@ type DiscordOAuthConfig struct {
 }
 
 type FrontendConfig struct {
-	URL       string
+	ClientURL string
+	AdminURL  string
 	CORSDebug bool
 }
 
@@ -241,7 +242,8 @@ func loadFrontendConfig() FrontendConfig {
 	corsDebug := utils.GetEnv("CORS_DEBUG", "") == "true"
 
 	return FrontendConfig{
-		URL:       utils.GetEnv("FRONTEND_URL", "http://localhost:3000"),
+		ClientURL: utils.GetEnv("FRONTEND_CLIENT_URL", ""),
+		AdminURL:  utils.GetEnv("FRONTEND_ADMIN_URL", ""),
 		CORSDebug: corsDebug,
 	}
 }

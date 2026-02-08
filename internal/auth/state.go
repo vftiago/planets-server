@@ -21,9 +21,10 @@ type StateManager struct {
 }
 
 type StateEntry struct {
-	CreatedAt time.Time `json:"created_at"`
-	Provider  string    `json:"provider"`
-	UserAgent string    `json:"user_agent"`
+	CreatedAt   time.Time `json:"created_at"`
+	Provider    string    `json:"provider"`
+	UserAgent   string    `json:"user_agent"`
+	RedirectURI string    `json:"redirect_uri"`
 }
 
 var globalStateManager *StateManager
@@ -46,7 +47,7 @@ func InitStateManager(redisClient *redis.Client) {
 	}
 }
 
-func (sm *StateManager) GenerateState(provider, userAgent string) (string, error) {
+func (sm *StateManager) GenerateState(provider, userAgent, redirectURI string) (string, error) {
 	logger := slog.With("component", "state_manager", "operation", "generate", "provider", provider)
 
 	b := make([]byte, 32)
@@ -57,9 +58,10 @@ func (sm *StateManager) GenerateState(provider, userAgent string) (string, error
 
 	state := base64.URLEncoding.EncodeToString(b)
 	entry := StateEntry{
-		CreatedAt: time.Now(),
-		Provider:  provider,
-		UserAgent: userAgent,
+		CreatedAt:   time.Now(),
+		Provider:    provider,
+		UserAgent:   userAgent,
+		RedirectURI: redirectURI,
 	}
 
 	if sm.useRedis {
@@ -105,12 +107,12 @@ func (sm *StateManager) storeInMemory(state string, entry StateEntry, logger *sl
 	return nil
 }
 
-func (sm *StateManager) ValidateState(state, provider, userAgent string) error {
+func (sm *StateManager) ValidateState(state, provider, userAgent string) (StateEntry, error) {
 	logger := slog.With("component", "state_manager", "operation", "validate", "provider", provider)
 
 	if state == "" {
 		logger.Warn("Empty state token provided")
-		return fmt.Errorf("state token is required")
+		return StateEntry{}, fmt.Errorf("state token is required")
 	}
 
 	if sm.useRedis {
@@ -120,7 +122,7 @@ func (sm *StateManager) ValidateState(state, provider, userAgent string) error {
 	return sm.validateFromMemory(state, provider, userAgent, logger)
 }
 
-func (sm *StateManager) validateFromRedis(state, provider, userAgent string, logger *slog.Logger) error {
+func (sm *StateManager) validateFromRedis(state, provider, userAgent string, logger *slog.Logger) (StateEntry, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -128,7 +130,7 @@ func (sm *StateManager) validateFromRedis(state, provider, userAgent string, log
 	data, err := sm.redis.Get(ctx, key).Bytes()
 	if err != nil {
 		logger.Warn("Invalid or expired state token", "error", err)
-		return fmt.Errorf("invalid or expired state token")
+		return StateEntry{}, fmt.Errorf("invalid or expired state token")
 	}
 
 	if err := sm.redis.Del(ctx, key).Err(); err != nil {
@@ -138,13 +140,13 @@ func (sm *StateManager) validateFromRedis(state, provider, userAgent string, log
 	var entry StateEntry
 	if err := json.Unmarshal(data, &entry); err != nil {
 		logger.Error("Failed to unmarshal state entry", "error", err)
-		return fmt.Errorf("invalid state data")
+		return StateEntry{}, fmt.Errorf("invalid state data")
 	}
 
-	return sm.validateEntry(entry, provider, userAgent, logger)
+	return entry, sm.validateEntry(entry, provider, userAgent, logger)
 }
 
-func (sm *StateManager) validateFromMemory(state, provider, userAgent string, logger *slog.Logger) error {
+func (sm *StateManager) validateFromMemory(state, provider, userAgent string, logger *slog.Logger) (StateEntry, error) {
 	sm.mutex.Lock()
 	entry, exists := sm.memoryStore[state]
 	if exists {
@@ -154,10 +156,10 @@ func (sm *StateManager) validateFromMemory(state, provider, userAgent string, lo
 
 	if !exists {
 		logger.Warn("Invalid or expired state token", "state_exists", false)
-		return fmt.Errorf("invalid or expired state token")
+		return StateEntry{}, fmt.Errorf("invalid or expired state token")
 	}
 
-	return sm.validateEntry(entry, provider, userAgent, logger)
+	return entry, sm.validateEntry(entry, provider, userAgent, logger)
 }
 
 func (sm *StateManager) validateEntry(entry StateEntry, provider, userAgent string, logger *slog.Logger) error {
@@ -224,16 +226,16 @@ func (sm *StateManager) cleanupExpiredStates() {
 	}
 }
 
-func GenerateOAuthState(provider, userAgent string) (string, error) {
+func GenerateOAuthState(provider, userAgent, redirectURI string) (string, error) {
 	if globalStateManager == nil {
 		return "", fmt.Errorf("state manager not initialized")
 	}
-	return globalStateManager.GenerateState(provider, userAgent)
+	return globalStateManager.GenerateState(provider, userAgent, redirectURI)
 }
 
-func ValidateOAuthState(state, provider, userAgent string) error {
+func ValidateOAuthState(state, provider, userAgent string) (StateEntry, error) {
 	if globalStateManager == nil {
-		return fmt.Errorf("state manager not initialized")
+		return StateEntry{}, fmt.Errorf("state manager not initialized")
 	}
 	return globalStateManager.ValidateState(state, provider, userAgent)
 }

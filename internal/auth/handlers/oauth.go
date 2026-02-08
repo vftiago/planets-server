@@ -10,7 +10,6 @@ import (
 	"planets-server/internal/auth"
 	"planets-server/internal/auth/providers"
 	"planets-server/internal/player"
-	"planets-server/internal/shared/config"
 	"planets-server/internal/shared/cookies"
 	"planets-server/internal/shared/errors"
 	"planets-server/internal/shared/response"
@@ -41,14 +40,16 @@ func (h *OAuthHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	state, err := auth.GenerateOAuthState(name, r.UserAgent())
+	redirectURI := resolveRedirectURI(r.URL.Query().Get("redirect_uri"))
+
+	state, err := auth.GenerateOAuthState(name, r.UserAgent(), redirectURI)
 	if err != nil {
 		response.Error(w, r, logger, errors.WrapInternal("failed to initialize OAuth flow", err))
 		return
 	}
 
-	url := h.provider.GetAuthURL(state)
-	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+	authURL := h.provider.GetAuthURL(state)
+	http.Redirect(w, r, authURL, http.StatusTemporaryRedirect)
 }
 
 func (h *OAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
@@ -65,30 +66,29 @@ func (h *OAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		"has_state", state != "",
 	)
 
+	// Try to recover redirect URI from state even in early-exit cases.
+	// Falls back to FRONTEND_CLIENT_URL if state is missing or invalid.
+	redirectURI := ""
+	if state != "" {
+		if entry, err := auth.ValidateOAuthState(state, name, r.UserAgent()); err == nil {
+			redirectURI = entry.RedirectURI
+		}
+	}
+
 	if errorParam != "" {
 		logger.Warn("OAuth authorization denied",
 			"provider", name,
 			"oauth_error", errorParam,
 			"error_description", r.URL.Query().Get("error_description"))
-		redirectWithError(w, r, "oauth_denied")
+		redirectWithError(w, r, redirectURI, "oauth_denied")
 		return
 	}
 
 	if code == "" {
 		logger.Error("OAuth callback missing authorization code", "provider", name)
-		redirectWithError(w, r, "oauth_error")
+		redirectWithError(w, r, redirectURI, "oauth_error")
 		return
 	}
-
-	if err := auth.ValidateOAuthState(state, name, r.UserAgent()); err != nil {
-		logger.Error("OAuth state validation failed",
-			"error", err,
-			"provider", name,
-			"state", state)
-		redirectWithError(w, r, "oauth_error")
-		return
-	}
-
 	logger.Info("OAuth state validation successful - proceeding with OAuth callback", "provider", name)
 
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
@@ -99,7 +99,7 @@ func (h *OAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		logger.Error("Failed to exchange authorization code",
 			"error", err,
 			"provider", name)
-		redirectWithError(w, r, "oauth_error")
+		redirectWithError(w, r, redirectURI, "oauth_error")
 		return
 	}
 
@@ -109,7 +109,7 @@ func (h *OAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		logger.Error("Failed to get user info",
 			"error", err,
 			"provider", name)
-		redirectWithError(w, r, "oauth_error")
+		redirectWithError(w, r, redirectURI, "oauth_error")
 		return
 	}
 
@@ -120,7 +120,7 @@ func (h *OAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 
 	if userInfo.Email == "" || !userInfo.EmailVerified {
 		userLogger.Error("User missing verified email", "provider", name)
-		redirectWithError(w, r, "oauth_error")
+		redirectWithError(w, r, redirectURI, "oauth_error")
 		return
 	}
 
@@ -129,7 +129,7 @@ func (h *OAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	existingPlayerID, err := h.authService.FindPlayerByAuthProvider(ctx, name, userInfo.ID)
 	if err != nil && errors.GetType(err) != errors.ErrorTypeNotFound {
 		userLogger.Error("Database error checking auth provider", "error", err)
-		redirectWithError(w, r, "database_error")
+		redirectWithError(w, r, redirectURI, "database_error")
 		return
 	}
 
@@ -139,7 +139,7 @@ func (h *OAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		p, err = h.playerService.GetPlayerByID(ctx, existingPlayerID)
 		if err != nil {
 			userLogger.Error("Failed to get existing player", "error", err)
-			redirectWithError(w, r, "database_error")
+			redirectWithError(w, r, redirectURI, "database_error")
 			return
 		}
 	} else {
@@ -154,7 +154,7 @@ func (h *OAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		)
 		if err != nil {
 			userLogger.Error("Failed to create player", "error", err)
-			redirectWithError(w, r, "database_error")
+			redirectWithError(w, r, redirectURI, "database_error")
 			return
 		}
 
@@ -162,7 +162,7 @@ func (h *OAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		err = h.authService.CreateAuthProvider(ctx, p.ID, name, userInfo.ID, userInfo.Email)
 		if err != nil {
 			userLogger.Error("Failed to create auth provider link", "error", err)
-			redirectWithError(w, r, "database_error")
+			redirectWithError(w, r, redirectURI, "database_error")
 			return
 		}
 	}
@@ -173,7 +173,7 @@ func (h *OAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	jwtToken, err := auth.GenerateJWT(p.ID, p.Username, p.Email, p.Role.String())
 	if err != nil {
 		playerLogger.Error("Failed to generate JWT token", "error", err)
-		redirectWithError(w, r, "auth_error")
+		redirectWithError(w, r, redirectURI, "auth_error")
 		return
 	}
 
@@ -184,7 +184,6 @@ func (h *OAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		"player_username", p.Username,
 		"player_role", p.Role)
 
-	cfg := config.GlobalConfig
-	successURL := fmt.Sprintf("%s/auth/callback?success=true", cfg.Frontend.URL)
+	successURL := fmt.Sprintf("%s/auth/callback?success=true", redirectURI)
 	http.Redirect(w, r, successURL, http.StatusTemporaryRedirect)
 }

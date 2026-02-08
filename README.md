@@ -54,8 +54,9 @@ Rate limiting is always enabled (10 req/s, burst 20). In production, the rate li
 #### Frontend Configuration
 
 ```bash
+FRONTEND_ADMIN_URL=
+FRONTEND_CLIENT_URL=
 CORS_DEBUG=false                     # Logs CORS request details when true
-FRONTEND_URL=http://localhost:3000
 ```
 
 #### JWT & Authentication Configuration

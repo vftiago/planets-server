@@ -231,7 +231,8 @@ Key environment variables (see `internal/shared/config/config.go` for complete l
 - `DB_*`: Database connection parameters
 - `GOOGLE_CLIENT_ID/SECRET`: Google OAuth credentials
 - `GITHUB_CLIENT_ID/SECRET`: GitHub OAuth credentials
-- `FRONTEND_URL`: Frontend URL for CORS
+- `FRONTEND_ADMIN_URL`: Admin dashboard URL for CORS
+- `FRONTEND_CLIENT_URL`: Player client URL for CORS
 - `SERVER_URL`: Server URL for OAuth redirects
 - `ADMIN_EMAIL`: Admin user email for role assignment
 

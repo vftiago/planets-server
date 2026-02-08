@@ -17,12 +17,19 @@ func NewCORS() *CORSMiddleware {
 	logger := slog.With("component", "cors", "operation", "setup")
 	logger.Debug("Setting up CORS middleware")
 
-	allowedOrigins := []string{cfg.Frontend.URL}
+	var allowedOrigins []string
+	if cfg.Frontend.ClientURL != "" {
+		allowedOrigins = append(allowedOrigins, cfg.Frontend.ClientURL)
+	}
+	if cfg.Frontend.AdminURL != "" {
+		allowedOrigins = append(allowedOrigins, cfg.Frontend.AdminURL)
+	}
 
 	corsConfig := cors.New(cors.Options{
 		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization"},
+		ExposedHeaders:   []string{"Set-Cookie"},
 		AllowCredentials: true,
 		Debug:            cfg.Frontend.CORSDebug,
 	})
