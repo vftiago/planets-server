@@ -13,7 +13,7 @@ func redirectWithError(w http.ResponseWriter, r *http.Request, baseURL, errorCod
 	if baseURL == "" {
 		baseURL = config.GlobalConfig.Frontend.ClientURL
 	}
-	errorURL := fmt.Sprintf("%s/auth/error?error=%s", baseURL, errorCode)
+	errorURL := fmt.Sprintf("%s/?error=%s", baseURL, errorCode)
 
 	http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
 }

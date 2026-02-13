@@ -42,7 +42,6 @@ func (r *Routes) Setup() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	healthHandler := serverHandlers.NewHealthHandler(r.db)
-	gameStatusHandler := gameHandlers.NewGameStatusHandler(r.playerService)
 	playersHandler := playerHandler.NewPlayersHandler(r.playerService)
 	meHandler := playerHandler.NewMeHandler()
 	logoutHandler := authHandlers.NewLogoutHandler()
@@ -68,17 +67,14 @@ func (r *Routes) Setup() *http.ServeMux {
 		r.oauthConfig.DiscordConfigured,
 	)
 
-	// Public endpoints
-	mux.Handle("/api/server/health", healthHandler)
-	mux.Handle("/api/game/status", gameStatusHandler)
-	mux.Handle("/api/players", playersHandler)
-	mux.Handle("/api/games", http.HandlerFunc(gameHandler.GetGames))
-	mux.Handle("/api/games/{id}/stats", http.HandlerFunc(gameHandler.GetGameStats))
-
 	// Protected endpoints (authenticated users)
+	mux.Handle("/api/players", middleware.JWTMiddleware(playersHandler))
+	mux.Handle("/api/games", middleware.JWTMiddleware(http.HandlerFunc(gameHandler.GetGames)))
+	mux.Handle("/api/games/{id}/stats", middleware.JWTMiddleware(http.HandlerFunc(gameHandler.GetGameStats)))
 	mux.Handle("/api/players/me", middleware.JWTMiddleware(meHandler))
 
 	// Admin-only endpoints (authenticated + admin role)
+	mux.Handle("/api/server/health", middleware.RequireAdmin(healthHandler))
 	mux.Handle("/api/games/create", middleware.RequireAdmin(http.HandlerFunc(gameHandler.CreateGame)))
 
 	// OAuth endpoints
@@ -91,9 +87,8 @@ func (r *Routes) Setup() *http.ServeMux {
 	mux.Handle("/auth/logout", logoutHandler)
 
 	logger.Info("Routes configured successfully",
-		"public_endpoints", []string{"/api/server/health", "/api/game/status", "/api/players", "/api/games", "/api/games/stats"},
-		"protected_endpoints", []string{"/api/players/me"},
-		"admin_endpoints", []string{"/api/games/create"},
+		"protected_endpoints", []string{"/api/players", "/api/games", "/api/games/{id}/stats", "/api/players/me"},
+		"admin_endpoints", []string{"/api/server/health", "/api/games/create"},
 		"auth_endpoints", []string{"/auth/google", "/auth/github", "/auth/discord", "/auth/logout"},
 	)
 
