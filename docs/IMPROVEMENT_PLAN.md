@@ -2,67 +2,7 @@
 
 Findings from a full codebase review. Organized by priority.
 
-## Bugs
-
-### ~~1. Route path parameter not used~~ FIXED
-
-### ~~2. `redirectWithError` missing URL encoding~~ FIXED
-
-Resolved by removing messages entirely — `redirectWithError` now only sends an error code.
-
-### ~~3. Method not allowed returns 400 instead of 405~~ FIXED
-
-### ~~4. `DeleteAllGames` runs outside the transaction~~ FIXED
-
----
-
-## Security
-
-### ~~5. Rate limiter IP spoofing~~ FIXED
-
-Added `RATE_LIMIT_TRUST_PROXY` config. Proxy headers are only trusted when explicitly enabled. Also fixed `X-Forwarded-For` comma parsing and port stripping from `RemoteAddr`.
-
-### ~~6. Middleware ordering~~ FIXED
-
-Reordered to CORS → Rate Limiter → Router. Refactored to sequential wrapping for clarity. Also renamed `SetupCORS` → `NewCORS` and `Handler` → `Middleware` for consistency with `RateLimiter`.
-
-### ~~7. No request body size limit~~ FIXED
-
-Added `MaxHeaderBytes` (1 MB) to HTTP server config and `http.MaxBytesReader` (1 MB) on the game creation endpoint.
-
-### ~~8. No input validation on universe config~~ DEFERRED
-
-Universe config env vars (`SECTORS_PER_GALAXY`, etc.) will be used as validation caps for the game creation endpoint when the admin dashboard is built.
-
-### ~~9. Missing security headers~~ FIXED
-
-Added `X-Content-Type-Options: nosniff` to all JSON responses via `setCommonHeaders` helper. `Strict-Transport-Security` can be added later when production deployment is configured.
-
----
-
-## Inconsistencies
-
-### ~~10. JWT/Admin middleware return plain text, not JSON~~ FIXED
-
-Replaced `http.Error()` calls with `response.Error()` using typed errors. Also added missing `errors.Forbidden()` constructor.
-
-### ~~11. Discord requires verified email, Google/GitHub don't~~ FIXED
-
-### ~~12. GitHub user ID is `int`, Google/Discord are `string`~~ FIXED
-
-Resolved together with #14 by introducing an `OAuthProvider` interface and `OAuthUser` struct. Each provider normalizes its API response internally (Discord sets `EmailVerified` from its `Verified` field; GitHub converts `int` ID via `strconv.Itoa`). The handler checks `!userInfo.EmailVerified` uniformly for all providers.
-
-### ~~13. Handler registration mixes `Handle` and `HandleFunc`~~ FIXED
-
-Standardized all route registrations to use `mux.Handle` with `http.HandlerFunc` wrappers.
-
----
-
 ## Code Quality / Duplication
-
-### ~~14. OAuth handlers are ~95% identical~~ FIXED
-
-Introduced `OAuthProvider` interface and `OAuthUser` struct in `internal/auth/providers/provider.go`. Each provider implements the interface, normalizing API-specific quirks internally. Replaced three handler files with a single generic `OAuthHandler` in `internal/auth/handlers/oauth.go`.
 
 ### 15. `getExecutor` duplicated across three repos
 
@@ -109,10 +49,6 @@ Special characters in DB password (spaces, `=`, `'`) would break the connection 
 **File**: `cmd/server/main.go:225`
 
 Shutdown timeout should be independent and longer than write timeout.
-
-### ~~22. `CreatePlanetsBatch` returns full objects when only count is used~~ FIXED
-
-Removed `RETURNING` clause and replaced `QueryContext` + row scanning with `ExecContext` + `RowsAffected()`. Repository now returns `int` directly.
 
 ---
 
