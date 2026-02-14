@@ -111,14 +111,18 @@ SERVER_PORT=8080                     # Required
 SERVER_URL=http://localhost:8080     # Required, used for OAuth redirect URLs
 ```
 
-#### Universe generation defaults
+#### Game Configuration
+
+Defaults for game creation. All can be overridden per game via the admin API.
 
 ```bash
-GALAXIES_PER_UNIVERSE=1
+GALAXY_COUNT=1
 MAX_PLANETS_PER_SYSTEM=12
+MAX_PLAYERS=200
 MIN_PLANETS_PER_SYSTEM=3
 SECTORS_PER_GALAXY=16
 SYSTEMS_PER_SECTOR=16
+TURN_INTERVAL_HOURS=1
 ```
 
 ### 4. Run the server

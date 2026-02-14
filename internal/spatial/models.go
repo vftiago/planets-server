@@ -26,9 +26,8 @@ type SpatialEntity struct {
 	Level       int        `json:"level"`
 	XCoord      int        `json:"x_coord"`
 	YCoord      int        `json:"y_coord"`
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	ChildCount  int        `json:"child_count"`
+	Name       string     `json:"name"`
+	ChildCount int        `json:"child_count"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 }

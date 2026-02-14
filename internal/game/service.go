@@ -2,6 +2,10 @@ package game
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
+	"encoding/hex"
+	mathrand "math/rand"
 
 	"planets-server/internal/planet"
 	"planets-server/internal/shared/database"
@@ -27,7 +31,7 @@ func NewService(
 	}
 }
 
-func (s *Service) CreateGame(ctx context.Context, config GameConfig, universeConfig UniverseConfig) (*Game, error) {
+func (s *Service) CreateGame(ctx context.Context, config GameConfig) (*Game, error) {
 	tx, err := s.gameRepo.db.BeginTx(ctx)
 	if err != nil {
 		return nil, errors.WrapInternal("failed to begin transaction for game creation", err)
@@ -45,12 +49,33 @@ func (s *Service) CreateGame(ctx context.Context, config GameConfig, universeCon
 		return nil, errors.WrapInternal("failed to delete existing games", err)
 	}
 
-	game, err := s.gameRepo.CreateGame(ctx, config, tx)
+	name, err := generateGameName()
+	if err != nil {
+		return nil, errors.WrapInternal("failed to generate game name", err)
+	}
+
+	seed := config.Seed
+	if seed == "" {
+		var err error
+		seed, err = generateSeed()
+		if err != nil {
+			return nil, errors.WrapInternal("failed to generate seed", err)
+		}
+	}
+
+	seedInt, err := parseSeed(seed)
+	if err != nil {
+		return nil, errors.WrapValidation("invalid seed format", err)
+	}
+
+	game, err := s.gameRepo.CreateGame(ctx, name, seed, config, tx)
 	if err != nil {
 		return nil, errors.WrapInternal("failed to create game", err)
 	}
 
-	err = s.generateUniverse(ctx, game.ID, universeConfig, tx)
+	rng := mathrand.New(mathrand.NewSource(seedInt))
+
+	err = s.generateUniverse(ctx, game.ID, config, rng, tx)
 	if err != nil {
 		return nil, errors.WrapInternal("failed to generate universe", err)
 	}
@@ -79,7 +104,34 @@ func (s *Service) GetGameStats(ctx context.Context, gameID int) (*GameStats, err
 	return s.gameRepo.GetGameStats(ctx, gameID)
 }
 
-func (s *Service) generateUniverse(ctx context.Context, gameID int, config UniverseConfig, tx *database.Tx) error {
+func generateGameName() (string, error) {
+	bytes := make([]byte, 4)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
+}
+
+func generateSeed() (string, error) {
+	bytes := make([]byte, 8)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
+}
+
+func parseSeed(seed string) (int64, error) {
+	bytes, err := hex.DecodeString(seed)
+	if err != nil {
+		return 0, err
+	}
+	if len(bytes) != 8 {
+		return 0, errors.Validation("seed must be exactly 16 hex characters")
+	}
+	return int64(binary.LittleEndian.Uint64(bytes)), nil
+}
+
+func (s *Service) generateUniverse(ctx context.Context, gameID int, config GameConfig, rng *mathrand.Rand, tx *database.Tx) error {
 	plan := config.BuildGenerationPlan()
 
 	var currentLevelIDs []int
@@ -124,6 +176,7 @@ func (s *Service) generateUniverse(ctx context.Context, gameID int, config Unive
 		systemIDs,
 		config.MinPlanetsPerSystem,
 		config.MaxPlanetsPerSystem,
+		rng,
 		tx,
 	)
 	if err != nil {

@@ -33,8 +33,7 @@ type BatchInsertRequest struct {
 	Level       int
 	XCoord      int
 	YCoord      int
-	Name        string
-	Description string
+	Name string
 }
 
 // CreateEntitiesBatch creates multiple spatial entities in a single database operation using JSON
@@ -54,7 +53,6 @@ func (r *Repository) CreateEntitiesBatch(ctx context.Context, entities []BatchIn
 	xCoords := make([]int, len(entities))
 	yCoords := make([]int, len(entities))
 	names := make([]string, len(entities))
-	descriptions := make([]string, len(entities))
 
 	for i, entity := range entities {
 		gameIDs[i] = entity.GameID
@@ -64,11 +62,10 @@ func (r *Repository) CreateEntitiesBatch(ctx context.Context, entities []BatchIn
 		xCoords[i] = entity.XCoord
 		yCoords[i] = entity.YCoord
 		names[i] = entity.Name
-		descriptions[i] = entity.Description
 	}
 
 	query := `
-		INSERT INTO spatial_entities (game_id, parent_id, entity_type, level, x_coord, y_coord, name, description, child_count)
+		INSERT INTO spatial_entities (game_id, parent_id, entity_type, level, x_coord, y_coord, name, child_count)
 		SELECT
 			unnest($1::int[]),
 			unnest($2::int[]),
@@ -77,7 +74,6 @@ func (r *Repository) CreateEntitiesBatch(ctx context.Context, entities []BatchIn
 			unnest($5::int[]),
 			unnest($6::int[]),
 			unnest($7::text[]),
-			unnest($8::text[]),
 			0
 		RETURNING id`
 
@@ -89,7 +85,6 @@ func (r *Repository) CreateEntitiesBatch(ctx context.Context, entities []BatchIn
 		pq.Array(xCoords),
 		pq.Array(yCoords),
 		pq.Array(names),
-		pq.Array(descriptions),
 	)
 	if err != nil {
 		return nil, errors.WrapInternal("failed to batch create spatial entities", err)

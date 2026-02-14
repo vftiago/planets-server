@@ -73,7 +73,7 @@ internal/
   │   ├── handlers/
   │   │   ├── game.go           # Game CRUD endpoints
   │   │   └── status.go         # Game status endpoint
-  │   ├── models.go             # Game, GameConfig structs
+  │   ├── models.go             # Game, GameConfig, GameStats structs
   │   ├── repository.go         # Game database operations
   │   └── service.go            # Game business logic, universe generation
   ├── spatial/                  # Unified spatial hierarchy (galaxy, sector, system)
@@ -177,12 +177,12 @@ The game uses a hierarchical spatial structure managed by the unified `spatial` 
 
 - **Galaxy**: Top-level container, contains sectors arranged in a grid pattern
 - **Sector**: Contains systems arranged in a grid pattern
-- **System**: Contains planets with random generation
+- **System**: Contains planets with seeded deterministic generation
 - **Planet**: Individual game objects with types, sizes, and populations
 
 The `spatial` package uses a single `spatial_entities` table with an `entity_type` column to distinguish between galaxies, sectors, and systems. Type aliases (`Galaxy`, `Sector`, `System`) provide semantic clarity in code.
 
-Universe generation is orchestrated by the game service, which coordinates the spatial and planet services to create the complete game world.
+Universe generation is orchestrated by the game service, which coordinates the spatial and planet services to create the complete game world. Each game stores a `seed` (int64) used to initialize a deterministic RNG, so the same seed + config always produces an identical universe. Game names are auto-generated hex strings.
 
 ### HTTP Layer
 
@@ -219,7 +219,7 @@ Universe generation is orchestrated by the game service, which coordinates the s
 The system uses multiple tables organized by domain:
 
 - **Players**: `players`, `player_auth_providers` - User accounts with OAuth linking
-- **Games**: `games` - Game instances with turn management
+- **Games**: `games` - Game instances with turn management and generation seed
 - **Spatial**: `spatial_entities` - Unified table for galaxies, sectors, and systems with `entity_type` discriminator
 - **Planets**: `planets` - Individual planets linked to systems
 
@@ -235,6 +235,10 @@ Key environment variables (see `internal/shared/config/config.go` for complete l
 - `FRONTEND_CLIENT_URL`: Player client URL for CORS
 - `SERVER_URL`: Server URL for OAuth redirects
 - `ADMIN_EMAIL`: Admin user email for role assignment
+- `MAX_PLAYERS`: Default max players per game
+- `TURN_INTERVAL_HOURS`: Default turn interval
+- `GALAXY_COUNT`, `SECTORS_PER_GALAXY`, `SYSTEMS_PER_SECTOR`: Universe generation defaults
+- `MIN_PLANETS_PER_SYSTEM`, `MAX_PLANETS_PER_SYSTEM`: Planet generation defaults
 
 ## Development Notes
 

@@ -25,22 +25,20 @@ func (r *Repository) getExecutor(tx *database.Tx) database.Executor {
 	return r.db
 }
 
-func (r *Repository) CreateGame(ctx context.Context, config GameConfig, tx *database.Tx) (*Game, error) {
+func (r *Repository) CreateGame(ctx context.Context, name string, seed string, config GameConfig, tx *database.Tx) (*Game, error) {
 	exec := r.getExecutor(tx)
 
 	query := `
-		INSERT INTO games (name, description, universe_name, universe_description, status, current_turn, max_players, turn_interval_hours)
-		VALUES ($1, $2, $3, $4, 'creating', 0, $5, $6)
-		RETURNING id, name, description, universe_name, universe_description, planet_count, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
+		INSERT INTO games (name, seed, status, current_turn, max_players, turn_interval_hours)
+		VALUES ($1, $2, 'creating', 0, $3, $4)
+		RETURNING id, name, seed, planet_count, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
 	`
 
 	var game Game
-	err := exec.QueryRowContext(ctx, query, config.Name, config.Description, config.UniverseName, config.UniverseDescription, config.MaxPlayers, config.TurnIntervalHours).Scan(
+	err := exec.QueryRowContext(ctx, query, name, seed, config.MaxPlayers, config.TurnIntervalHours).Scan(
 		&game.ID,
 		&game.Name,
-		&game.Description,
-		&game.UniverseName,
-		&game.UniverseDescription,
+		&game.Seed,
 		&game.PlanetCount,
 		&game.Status,
 		&game.CurrentTurn,
@@ -60,7 +58,7 @@ func (r *Repository) CreateGame(ctx context.Context, config GameConfig, tx *data
 
 func (r *Repository) GetGameByID(ctx context.Context, gameID int) (*Game, error) {
 	query := `
-		SELECT id, name, description, universe_name, universe_description, planet_count, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
+		SELECT id, name, seed, planet_count, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
 		FROM games
 		WHERE id = $1
 	`
@@ -69,9 +67,7 @@ func (r *Repository) GetGameByID(ctx context.Context, gameID int) (*Game, error)
 	err := r.db.QueryRowContext(ctx, query, gameID).Scan(
 		&game.ID,
 		&game.Name,
-		&game.Description,
-		&game.UniverseName,
-		&game.UniverseDescription,
+		&game.Seed,
 		&game.PlanetCount,
 		&game.Status,
 		&game.CurrentTurn,
@@ -94,7 +90,7 @@ func (r *Repository) GetGameByID(ctx context.Context, gameID int) (*Game, error)
 
 func (r *Repository) GetAllGames(ctx context.Context) ([]Game, error) {
 	query := `
-		SELECT id, name, description, universe_name, universe_description, planet_count, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
+		SELECT id, name, seed, planet_count, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
 		FROM games
 		ORDER BY created_at DESC
 	`
@@ -111,9 +107,7 @@ func (r *Repository) GetAllGames(ctx context.Context) ([]Game, error) {
 		err := rows.Scan(
 			&game.ID,
 			&game.Name,
-			&game.Description,
-			&game.UniverseName,
-			&game.UniverseDescription,
+			&game.Seed,
 			&game.PlanetCount,
 			&game.Status,
 			&game.CurrentTurn,

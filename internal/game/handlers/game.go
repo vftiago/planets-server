@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"planets-server/internal/game"
+	appconfig "planets-server/internal/shared/config"
 	"planets-server/internal/shared/errors"
 	"planets-server/internal/shared/response"
 )
@@ -28,52 +29,25 @@ func (h *GameHandler) CreateGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var request struct {
-		Game     game.GameConfig     `json:"game"`
-		Universe game.UniverseConfig `json:"universe"`
+	defaults := appconfig.GlobalConfig.Game
+
+	gameConfig := game.GameConfig{
+		MaxPlayers:          defaults.MaxPlayers,
+		TurnIntervalHours:   defaults.TurnIntervalHours,
+		GalaxyCount:         defaults.GalaxyCount,
+		SectorsPerGalaxy:    defaults.SectorsPerGalaxy,
+		SystemsPerSector:    defaults.SystemsPerSector,
+		MinPlanetsPerSystem: defaults.MinPlanetsPerSystem,
+		MaxPlanetsPerSystem: defaults.MaxPlanetsPerSystem,
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&gameConfig); err != nil {
 		response.Error(w, r, logger, errors.WrapValidation("invalid JSON in request body", err))
 		return
 	}
 
-	// Validate required game fields
-	if request.Game.Name == "" {
-		response.Error(w, r, logger, errors.Validation("game name is required"))
-		return
-	}
-
-	// Set defaults for optional game fields
-	if request.Game.MaxPlayers == 0 {
-		request.Game.MaxPlayers = 10
-	}
-	if request.Game.TurnIntervalHours == 0 {
-		request.Game.TurnIntervalHours = 1
-	}
-	if request.Game.UniverseName == "" {
-		request.Game.UniverseName = "Game Universe"
-	}
-
-	// Set defaults for universe configuration
-	if request.Universe.GalaxyCount == 0 {
-		request.Universe.GalaxyCount = 1
-	}
-	if request.Universe.SectorsPerGalaxy == 0 {
-		request.Universe.SectorsPerGalaxy = 10
-	}
-	if request.Universe.SystemsPerSector == 0 {
-		request.Universe.SystemsPerSector = 10
-	}
-	if request.Universe.MinPlanetsPerSystem == 0 {
-		request.Universe.MinPlanetsPerSystem = 1
-	}
-	if request.Universe.MaxPlanetsPerSystem == 0 {
-		request.Universe.MaxPlanetsPerSystem = 8
-	}
-
-	createdGame, err := h.service.CreateGame(ctx, request.Game, request.Universe)
+	createdGame, err := h.service.CreateGame(ctx, gameConfig)
 	if err != nil {
 		response.Error(w, r, logger, err)
 		return

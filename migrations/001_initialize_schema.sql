@@ -43,9 +43,7 @@ CREATE TABLE player_auth_providers (
 CREATE TABLE games (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
-    description TEXT,
-    universe_name VARCHAR(100) NOT NULL DEFAULT 'Game Universe',
-    universe_description TEXT,
+    seed VARCHAR(16) NOT NULL,
     planet_count INTEGER NOT NULL DEFAULT 0,
     status VARCHAR(20) NOT NULL DEFAULT 'creating',
     current_turn INTEGER NOT NULL DEFAULT 0,
@@ -65,7 +63,6 @@ CREATE TABLE spatial_entities (
     x_coord INTEGER NOT NULL,
     y_coord INTEGER NOT NULL,
     name VARCHAR(100) NOT NULL,
-    description TEXT,
     child_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),

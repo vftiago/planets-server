@@ -19,7 +19,7 @@ type Config struct {
 	Frontend  FrontendConfig
 	Logging   LoggingConfig
 	RateLimit RateLimitConfig
-	Universe  UniverseConfig
+	Game      GameConfig
 	Admin     AdminConfig
 }
 
@@ -103,13 +103,11 @@ type RateLimitConfig struct {
 	TrustProxy        bool
 }
 
-// TODO: These values are not yet used. They should serve as validation caps
-// for the game creation endpoint (admin dashboard). The actual universe
-// parameters will come from the request body, and these config values
-// will define the allowed maximums.
-type UniverseConfig struct {
-	GalaxiesPerUniverse int
-	SectorCount         int
+type GameConfig struct {
+	MaxPlayers          int
+	TurnIntervalHours   int
+	GalaxyCount         int
+	SectorsPerGalaxy    int
 	SystemsPerSector    int
 	MinPlanetsPerSystem int
 	MaxPlanetsPerSystem int
@@ -151,7 +149,7 @@ func load() (*Config, error) {
 		Frontend:  loadFrontendConfig(),
 		Logging:   loadLoggingConfig(),
 		RateLimit: loadRateLimitConfig(),
-		Universe:  loadUniverseConfig(),
+		Game:      loadGameConfig(),
 		Admin:     loadAdminConfig(),
 	}
 
@@ -267,16 +265,20 @@ func loadRateLimitConfig() RateLimitConfig {
 	}
 }
 
-func loadUniverseConfig() UniverseConfig {
-	galaxiesPerUniverse, _ := strconv.Atoi(utils.GetEnv("GALAXIES_PER_UNIVERSE", "1"))
-	sectorCount, _ := strconv.Atoi(utils.GetEnv("SECTORS_PER_GALAXY", "16"))
+func loadGameConfig() GameConfig {
+	maxPlayers, _ := strconv.Atoi(utils.GetEnv("MAX_PLAYERS", "200"))
+	turnIntervalHours, _ := strconv.Atoi(utils.GetEnv("TURN_INTERVAL_HOURS", "1"))
+	galaxyCount, _ := strconv.Atoi(utils.GetEnv("GALAXY_COUNT", "1"))
+	sectorsPerGalaxy, _ := strconv.Atoi(utils.GetEnv("SECTORS_PER_GALAXY", "16"))
 	systemsPerSector, _ := strconv.Atoi(utils.GetEnv("SYSTEMS_PER_SECTOR", "16"))
 	minPlanets, _ := strconv.Atoi(utils.GetEnv("MIN_PLANETS_PER_SYSTEM", "3"))
 	maxPlanets, _ := strconv.Atoi(utils.GetEnv("MAX_PLANETS_PER_SYSTEM", "12"))
 
-	return UniverseConfig{
-		GalaxiesPerUniverse: galaxiesPerUniverse,
-		SectorCount:         sectorCount,
+	return GameConfig{
+		MaxPlayers:          maxPlayers,
+		TurnIntervalHours:   turnIntervalHours,
+		GalaxyCount:         galaxyCount,
+		SectorsPerGalaxy:    sectorsPerGalaxy,
 		SystemsPerSector:    systemsPerSector,
 		MinPlanetsPerSystem: minPlanets,
 		MaxPlanetsPerSystem: maxPlanets,

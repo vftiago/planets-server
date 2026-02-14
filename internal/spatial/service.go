@@ -54,14 +54,13 @@ func (s *Service) GenerateEntities(ctx context.Context, gameID int, parentIDs []
 				nameIndex++
 
 				batchRequests = append(batchRequests, BatchInsertRequest{
-					GameID:      gameID,
-					ParentID:    parentID,
-					EntityType:  entityType,
-					Level:       level,
-					XCoord:      x,
-					YCoord:      y,
-					Name:        name,
-					Description: "",
+					GameID:     gameID,
+					ParentID:   parentID,
+					EntityType: entityType,
+					Level:      level,
+					XCoord:     x,
+					YCoord:     y,
+					Name:       name,
 				})
 
 				entityCount++

@@ -26,8 +26,8 @@ func (s *Service) generatePlanetNames() []string {
 	}
 }
 
-// generateRandomPlanetType returns a random planet type
-func (s *Service) generateRandomPlanetType() PlanetType {
+// generateRandomPlanetType returns a random planet type using the provided RNG
+func (s *Service) generateRandomPlanetType(rng *rand.Rand) PlanetType {
 	types := []PlanetType{
 		PlanetTypeBarren,
 		PlanetTypeTerrestrial,
@@ -43,7 +43,7 @@ func (s *Service) generateRandomPlanetType() PlanetType {
 		totalWeight += w
 	}
 
-	roll := rand.Intn(totalWeight)
+	roll := rng.Intn(totalWeight)
 	currentWeight := 0
 	for i, weight := range weights {
 		currentWeight += weight
@@ -55,7 +55,7 @@ func (s *Service) generateRandomPlanetType() PlanetType {
 	return PlanetTypeTerrestrial // fallback
 }
 
-func (s *Service) GeneratePlanets(ctx context.Context, systemIDs []int, minPlanets, maxPlanets int, tx *database.Tx) (int, error) {
+func (s *Service) GeneratePlanets(ctx context.Context, systemIDs []int, minPlanets, maxPlanets int, rng *rand.Rand, tx *database.Tx) (int, error) {
 	if len(systemIDs) == 0 {
 		return 0, nil
 	}
@@ -70,7 +70,7 @@ func (s *Service) GeneratePlanets(ctx context.Context, systemIDs []int, minPlane
 			return 0, errors.WrapInternal("planet generation cancelled", err)
 		}
 
-		planetCount := minPlanets + rand.Intn(maxPlanets-minPlanets+1)
+		planetCount := minPlanets + rng.Intn(maxPlanets-minPlanets+1)
 
 		for i := 0; i < planetCount; i++ {
 			planetName := fmt.Sprintf("Planet %s", planetNames[i%len(planetNames)])
@@ -79,9 +79,9 @@ func (s *Service) GeneratePlanets(ctx context.Context, systemIDs []int, minPlane
 				SystemID:      systemID,
 				PlanetIndex:   i,
 				Name:          planetName,
-				Type:          s.generateRandomPlanetType(),
-				Size:          50 + rand.Intn(151),
-				MaxPopulation: int64(100000 + rand.Intn(900000)),
+				Type:          s.generateRandomPlanetType(rng),
+				Size:          50 + rng.Intn(151),
+				MaxPopulation: int64(100000 + rng.Intn(900000)),
 			})
 		}
 	}
