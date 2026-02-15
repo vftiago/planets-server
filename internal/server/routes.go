@@ -76,6 +76,7 @@ func (r *Routes) Setup() *http.ServeMux {
 	// Admin-only endpoints (authenticated + admin role)
 	mux.Handle("/api/server/health", middleware.RequireAdmin(healthHandler))
 	mux.Handle("/api/games/create", middleware.RequireAdmin(http.HandlerFunc(gameHandler.CreateGame)))
+	mux.Handle("/api/games/{id}/delete", middleware.RequireAdmin(http.HandlerFunc(gameHandler.DeleteGame)))
 
 	// OAuth endpoints
 	mux.Handle("/auth/google", http.HandlerFunc(googleAuthHandler.HandleAuth))
@@ -88,7 +89,7 @@ func (r *Routes) Setup() *http.ServeMux {
 
 	logger.Info("Routes configured successfully",
 		"protected_endpoints", []string{"/api/players", "/api/games", "/api/games/{id}/stats", "/api/players/me"},
-		"admin_endpoints", []string{"/api/server/health", "/api/games/create"},
+		"admin_endpoints", []string{"/api/server/health", "/api/games/create", "/api/games/{id}/delete"},
 		"auth_endpoints", []string{"/auth/google", "/auth/github", "/auth/discord", "/auth/logout"},
 	)
 

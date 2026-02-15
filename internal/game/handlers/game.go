@@ -78,6 +78,35 @@ func (h *GameHandler) GetGames(w http.ResponseWriter, r *http.Request) {
 	response.Success(w, http.StatusOK, games)
 }
 
+func (h *GameHandler) DeleteGame(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	logger := slog.With("handler", "delete_game")
+
+	if r.Method != http.MethodDelete {
+		response.Error(w, r, logger, errors.MethodNotAllowed(r.Method))
+		return
+	}
+
+	gameIDStr := r.PathValue("id")
+	if gameIDStr == "" {
+		response.Error(w, r, logger, errors.Validation("game ID is required"))
+		return
+	}
+
+	gameID, err := strconv.Atoi(gameIDStr)
+	if err != nil {
+		response.Error(w, r, logger, errors.WrapValidation("invalid game ID format", err))
+		return
+	}
+
+	if err := h.service.DeleteGame(ctx, gameID); err != nil {
+		response.Error(w, r, logger, err)
+		return
+	}
+
+	response.Success(w, http.StatusOK, map[string]int{"deleted_id": gameID})
+}
+
 func (h *GameHandler) GetGameStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logger := slog.With("handler", "get_game_stats")

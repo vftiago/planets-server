@@ -54,12 +54,6 @@ Shutdown timeout should be independent and longer than write timeout.
 
 ## Additional Findings
 
-### 23. `DeleteAllGames` on every game creation
-
-**File**: `internal/game/service.go:42-46`
-
-The service deletes all existing games every time a new game is created, guarded only by a TODO comment about "development constraint". This is a data-loss risk if it reaches production.
-
 ### 24. Rate limiter cleanup is unreliable
 
 **File**: `internal/middleware/rate_limit.go:53-66`

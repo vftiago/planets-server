@@ -43,12 +43,6 @@ func (s *Service) CreateGame(ctx context.Context, config GameConfig) (*Game, err
 		}
 	}()
 
-	// Development constraint: only one game allowed at a time
-	// TODO: Remove this when implementing multi-game support
-	if err := s.gameRepo.DeleteAllGames(ctx, tx); err != nil {
-		return nil, errors.WrapInternal("failed to delete existing games", err)
-	}
-
 	name, err := generateGameName()
 	if err != nil {
 		return nil, errors.WrapInternal("failed to generate game name", err)
@@ -102,6 +96,10 @@ func (s *Service) GetAllGames(ctx context.Context) ([]Game, error) {
 
 func (s *Service) GetGameStats(ctx context.Context, gameID int) (*GameStats, error) {
 	return s.gameRepo.GetGameStats(ctx, gameID)
+}
+
+func (s *Service) DeleteGame(ctx context.Context, gameID int) error {
+	return s.gameRepo.DeleteGame(ctx, gameID)
 }
 
 func generateGameName() (string, error) {
