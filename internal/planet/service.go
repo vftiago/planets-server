@@ -18,6 +18,10 @@ func NewService(repo *Repository) *Service {
 	}
 }
 
+func (s *Service) GetBySystemID(ctx context.Context, systemID int) ([]Planet, error) {
+	return s.repo.GetBySystemID(ctx, systemID)
+}
+
 // generatePlanetNames returns a list of planet suffixes
 func (s *Service) generatePlanetNames() []string {
 	return []string{

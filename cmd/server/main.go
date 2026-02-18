@@ -86,7 +86,7 @@ func main() {
 	cors := initCORS()
 	rateLimiter := initRateLimiter()
 
-	routes := server.NewRoutes(db, playerService, authService, gameService, oauthConfig, logger)
+	routes := server.NewRoutes(db, playerService, authService, gameService, spatialService, planetService, oauthConfig, logger)
 	mux := routes.Setup()
 
 	var handler http.Handler = mux

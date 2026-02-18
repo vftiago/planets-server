@@ -73,3 +73,39 @@ func (r *Repository) CreatePlanetsBatch(ctx context.Context, planets []BatchInse
 
 	return int(count), nil
 }
+
+const planetColumns = `id, system_id, planet_index, name, type, size, population, max_population, owner_id, created_at, updated_at`
+
+func (r *Repository) scanPlanet(scanner interface{ Scan(...any) error }) (Planet, error) {
+	var p Planet
+	err := scanner.Scan(
+		&p.ID, &p.SystemID, &p.PlanetIndex, &p.Name, &p.Type,
+		&p.Size, &p.Population, &p.MaxPopulation, &p.OwnerID, &p.CreatedAt, &p.UpdatedAt,
+	)
+	return p, err
+}
+
+func (r *Repository) GetBySystemID(ctx context.Context, systemID int) ([]Planet, error) {
+	query := `SELECT ` + planetColumns + ` FROM planets WHERE system_id = $1 ORDER BY planet_index`
+
+	rows, err := r.db.QueryContext(ctx, query, systemID)
+	if err != nil {
+		return nil, errors.WrapInternal("failed to query planets by system", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var planets []Planet
+	for rows.Next() {
+		planet, err := r.scanPlanet(rows)
+		if err != nil {
+			return nil, errors.WrapInternal("failed to scan planet", err)
+		}
+		planets = append(planets, planet)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.WrapInternal("error iterating planets", err)
+	}
+
+	return planets, nil
+}

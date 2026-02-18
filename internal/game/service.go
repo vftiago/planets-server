@@ -130,29 +130,40 @@ func parseSeed(seed string) (int64, error) {
 }
 
 func (s *Service) generateUniverse(ctx context.Context, gameID int, config GameConfig, rng *mathrand.Rand, tx *database.Tx) error {
+	// Create the universe entity (level 0, root of spatial hierarchy)
+	universeIDs, err := s.spatialService.GenerateEntities(
+		ctx,
+		gameID,
+		[]*int{nil},
+		spatial.EntityTypeUniverse,
+		1,
+		tx,
+	)
+	if err != nil {
+		return errors.WrapInternal("failed to create universe entity", err)
+	}
+
+	universeID := universeIDs[0]
+
+	if err := s.gameRepo.SetUniverseID(ctx, gameID, universeID, tx); err != nil {
+		return errors.WrapInternal("failed to link universe to game", err)
+	}
+
+	// Generate spatial hierarchy: galaxies → sectors → systems
 	plan := config.BuildGenerationPlan()
+	currentLevelIDs := universeIDs
 
-	var currentLevelIDs []int
-
-	for i, level := range plan {
+	for _, level := range plan {
 		if err := ctx.Err(); err != nil {
 			return errors.WrapInternal("universe generation cancelled", err)
 		}
 
-		var parentIDs []*int
-		if i == 0 {
-			// For first level parent_id is NULL
-			parentIDs = []*int{nil}
-		} else {
-			// For subsequent levels, use IDs from previous level as parents
-			parentIDs = make([]*int, len(currentLevelIDs))
-			for j, id := range currentLevelIDs {
-				idCopy := id
-				parentIDs[j] = &idCopy
-			}
+		parentIDs := make([]*int, len(currentLevelIDs))
+		for j, id := range currentLevelIDs {
+			idCopy := id
+			parentIDs[j] = &idCopy
 		}
 
-		var err error
 		currentLevelIDs, err = s.spatialService.GenerateEntities(
 			ctx,
 			gameID,

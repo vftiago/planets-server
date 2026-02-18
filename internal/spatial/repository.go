@@ -2,6 +2,7 @@ package spatial
 
 import (
 	"context"
+	"database/sql"
 	"planets-server/internal/shared/database"
 	"planets-server/internal/shared/errors"
 
@@ -106,4 +107,89 @@ func (r *Repository) CreateEntitiesBatch(ctx context.Context, entities []BatchIn
 	}
 
 	return entityIDs, nil
+}
+
+func (r *Repository) scanEntity(scanner interface{ Scan(...any) error }) (SpatialEntity, error) {
+	var e SpatialEntity
+	err := scanner.Scan(
+		&e.ID, &e.GameID, &e.ParentID, &e.EntityType, &e.Level,
+		&e.XCoord, &e.YCoord, &e.Name, &e.ChildCount, &e.CreatedAt, &e.UpdatedAt,
+	)
+	return e, err
+}
+
+const entityColumns = `id, game_id, parent_id, entity_type, level, x_coord, y_coord, name, child_count, created_at, updated_at`
+
+func (r *Repository) GetByID(ctx context.Context, entityID int) (*SpatialEntity, error) {
+	query := `SELECT ` + entityColumns + ` FROM spatial_entities WHERE id = $1`
+
+	entity, err := r.scanEntity(r.db.QueryRowContext(ctx, query, entityID))
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errors.NotFoundf("spatial entity not found with id: %d", entityID)
+		}
+		return nil, errors.WrapInternal("failed to get spatial entity by id", err)
+	}
+
+	return &entity, nil
+}
+
+func (r *Repository) GetChildren(ctx context.Context, parentID int) ([]SpatialEntity, error) {
+	query := `SELECT ` + entityColumns + ` FROM spatial_entities WHERE parent_id = $1 ORDER BY x_coord, y_coord`
+
+	rows, err := r.db.QueryContext(ctx, query, parentID)
+	if err != nil {
+		return nil, errors.WrapInternal("failed to query children", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var entities []SpatialEntity
+	for rows.Next() {
+		entity, err := r.scanEntity(rows)
+		if err != nil {
+			return nil, errors.WrapInternal("failed to scan spatial entity", err)
+		}
+		entities = append(entities, entity)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.WrapInternal("error iterating spatial entities", err)
+	}
+
+	return entities, nil
+}
+
+func (r *Repository) GetAncestors(ctx context.Context, entityID int) ([]SpatialEntity, error) {
+	query := `
+		WITH RECURSIVE ancestors AS (
+			SELECT ` + entityColumns + `
+			FROM spatial_entities WHERE id = $1
+			UNION ALL
+			SELECT se.id, se.game_id, se.parent_id, se.entity_type, se.level,
+				se.x_coord, se.y_coord, se.name, se.child_count, se.created_at, se.updated_at
+			FROM spatial_entities se
+			INNER JOIN ancestors a ON se.id = a.parent_id
+		)
+		SELECT * FROM ancestors ORDER BY level ASC`
+
+	rows, err := r.db.QueryContext(ctx, query, entityID)
+	if err != nil {
+		return nil, errors.WrapInternal("failed to query ancestors", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var entities []SpatialEntity
+	for rows.Next() {
+		entity, err := r.scanEntity(rows)
+		if err != nil {
+			return nil, errors.WrapInternal("failed to scan ancestor entity", err)
+		}
+		entities = append(entities, entity)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.WrapInternal("error iterating ancestor entities", err)
+	}
+
+	return entities, nil
 }

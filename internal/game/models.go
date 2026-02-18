@@ -18,6 +18,7 @@ type Game struct {
 	ID                int        `json:"id"`
 	Name              string     `json:"name"`
 	Seed              string     `json:"seed"`
+	UniverseID        *int       `json:"universe_id"`
 	PlanetCount       int        `json:"planet_count"`
 	Status            GameStatus `json:"status"`
 	CurrentTurn       int        `json:"current_turn"`

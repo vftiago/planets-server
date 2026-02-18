@@ -15,7 +15,7 @@ DROP FUNCTION IF EXISTS update_planet_counts CASCADE;
 DROP FUNCTION IF EXISTS update_player_stats CASCADE;
 
 CREATE TYPE planet_type AS ENUM ('barren', 'terrestrial', 'gas_giant', 'ice', 'volcanic');
-CREATE TYPE entity_type AS ENUM ('galaxy', 'sector', 'system');
+CREATE TYPE entity_type AS ENUM ('universe', 'galaxy', 'sector', 'system');
 
 CREATE TABLE players (
     id SERIAL PRIMARY KEY,
@@ -44,6 +44,7 @@ CREATE TABLE games (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     seed VARCHAR(16) NOT NULL,
+    universe_id INTEGER,
     planet_count INTEGER NOT NULL DEFAULT 0,
     status VARCHAR(20) NOT NULL DEFAULT 'creating',
     current_turn INTEGER NOT NULL DEFAULT 0,
@@ -66,12 +67,13 @@ CREATE TABLE spatial_entities (
     child_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
-    CHECK (level > 0),
-    CHECK ((level = 1 AND parent_id IS NULL) OR (level > 1 AND parent_id IS NOT NULL))
+    CHECK (level >= 0),
+    CHECK ((level = 0 AND parent_id IS NULL) OR (level > 0 AND parent_id IS NOT NULL))
 );
 
-CREATE UNIQUE INDEX idx_spatial_entities_level1_coords ON spatial_entities (game_id, x_coord, y_coord) WHERE level = 1;
 CREATE UNIQUE INDEX idx_spatial_entities_parent_coords ON spatial_entities (parent_id, x_coord, y_coord) WHERE parent_id IS NOT NULL;
+
+ALTER TABLE games ADD CONSTRAINT fk_games_universe_id FOREIGN KEY (universe_id) REFERENCES spatial_entities(id) ON DELETE SET NULL;
 
 CREATE TABLE planets (
     id SERIAL PRIMARY KEY,

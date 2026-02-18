@@ -125,6 +125,17 @@ SYSTEMS_PER_SECTOR=16
 TURN_INTERVAL_HOURS=1
 ```
 
+### Reset Database
+
+Drop and recreate the database to start fresh. Migrations run automatically on next server start.
+
+```bash
+PGPASSWORD=postgres psql -h localhost -U postgres -c "DROP DATABASE IF EXISTS planets;"
+PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE planets;"
+```
+
+Adjust credentials to match your `DB_*` settings in `.env`.
+
 ### 4. Run the server
 
 ```bash

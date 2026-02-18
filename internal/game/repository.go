@@ -58,7 +58,7 @@ func (r *Repository) CreateGame(ctx context.Context, name string, seed string, c
 
 func (r *Repository) GetGameByID(ctx context.Context, gameID int) (*Game, error) {
 	query := `
-		SELECT id, name, seed, planet_count, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
+		SELECT id, name, seed, universe_id, planet_count, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
 		FROM games
 		WHERE id = $1
 	`
@@ -68,6 +68,7 @@ func (r *Repository) GetGameByID(ctx context.Context, gameID int) (*Game, error)
 		&game.ID,
 		&game.Name,
 		&game.Seed,
+		&game.UniverseID,
 		&game.PlanetCount,
 		&game.Status,
 		&game.CurrentTurn,
@@ -90,7 +91,7 @@ func (r *Repository) GetGameByID(ctx context.Context, gameID int) (*Game, error)
 
 func (r *Repository) GetAllGames(ctx context.Context) ([]Game, error) {
 	query := `
-		SELECT id, name, seed, planet_count, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
+		SELECT id, name, seed, universe_id, planet_count, status, current_turn, max_players, turn_interval_hours, next_turn_at, created_at, updated_at
 		FROM games
 		ORDER BY created_at DESC
 	`
@@ -108,6 +109,7 @@ func (r *Repository) GetAllGames(ctx context.Context) ([]Game, error) {
 			&game.ID,
 			&game.Name,
 			&game.Seed,
+			&game.UniverseID,
 			&game.PlanetCount,
 			&game.Status,
 			&game.CurrentTurn,
@@ -214,6 +216,18 @@ func (r *Repository) DeleteGame(ctx context.Context, gameID int) error {
 
 	if rowsAffected == 0 {
 		return errors.NotFoundf("game not found with id: %d", gameID)
+	}
+
+	return nil
+}
+
+func (r *Repository) SetUniverseID(ctx context.Context, gameID int, universeID int, tx *database.Tx) error {
+	exec := r.getExecutor(tx)
+
+	query := `UPDATE games SET universe_id = $2 WHERE id = $1`
+	_, err := exec.ExecContext(ctx, query, gameID, universeID)
+	if err != nil {
+		return errors.WrapInternal("failed to set universe_id on game", err)
 	}
 
 	return nil

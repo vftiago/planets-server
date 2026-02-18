@@ -80,8 +80,22 @@ func (s *Service) GenerateEntities(ctx context.Context, gameID int, parentIDs []
 	return entityIDs, nil
 }
 
+func (s *Service) GetByID(ctx context.Context, entityID int) (*SpatialEntity, error) {
+	return s.repo.GetByID(ctx, entityID)
+}
+
+func (s *Service) GetChildren(ctx context.Context, parentID int) ([]SpatialEntity, error) {
+	return s.repo.GetChildren(ctx, parentID)
+}
+
+func (s *Service) GetAncestors(ctx context.Context, entityID int) ([]SpatialEntity, error) {
+	return s.repo.GetAncestors(ctx, entityID)
+}
+
 func (s *Service) generateNames(entityType EntityType) []string {
 	switch entityType {
+	case EntityTypeUniverse:
+		return []string{"Universe"}
 	case EntityTypeGalaxy:
 		return []string{"Andromeda", "Milky Way", "Centaurus", "Pegasus", "Cygnus", "Draco"}
 	case EntityTypeSector:

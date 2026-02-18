@@ -7,15 +7,17 @@ import (
 type EntityType string
 
 const (
-	EntityTypeGalaxy EntityType = "galaxy"
-	EntityTypeSector EntityType = "sector"
-	EntityTypeSystem EntityType = "system"
+	EntityTypeUniverse EntityType = "universe"
+	EntityTypeGalaxy   EntityType = "galaxy"
+	EntityTypeSector   EntityType = "sector"
+	EntityTypeSystem   EntityType = "system"
 )
 
 var EntityLevels = map[EntityType]int{
-	EntityTypeGalaxy: 1,
-	EntityTypeSector: 2,
-	EntityTypeSystem: 3,
+	EntityTypeUniverse: 0,
+	EntityTypeGalaxy:   1,
+	EntityTypeSector:   2,
+	EntityTypeSystem:   3,
 }
 
 type SpatialEntity struct {
@@ -32,7 +34,8 @@ type SpatialEntity struct {
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
-// Convenience type aliases for backward compatibility
+// Convenience type aliases
+type Universe = SpatialEntity
 type Galaxy = SpatialEntity
 type Sector = SpatialEntity
 type System = SpatialEntity
