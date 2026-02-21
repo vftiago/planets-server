@@ -3,8 +3,8 @@ package game
 import (
 	"context"
 	"crypto/rand"
-	"encoding/binary"
 	"encoding/hex"
+	"hash/fnv"
 	mathrand "math/rand"
 
 	"planets-server/internal/planet"
@@ -55,12 +55,11 @@ func (s *Service) CreateGame(ctx context.Context, config GameConfig) (*Game, err
 		if err != nil {
 			return nil, errors.WrapInternal("failed to generate seed", err)
 		}
+	} else if len(seed) < 3 || len(seed) > 32 {
+		return nil, errors.Validation("seed must be between 3 and 32 characters")
 	}
 
-	seedInt, err := parseSeed(seed)
-	if err != nil {
-		return nil, errors.WrapValidation("invalid seed format", err)
-	}
+	seedInt := hashSeed(seed)
 
 	game, err := s.gameRepo.CreateGame(ctx, name, seed, config, tx)
 	if err != nil {
@@ -118,15 +117,10 @@ func generateSeed() (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-func parseSeed(seed string) (int64, error) {
-	bytes, err := hex.DecodeString(seed)
-	if err != nil {
-		return 0, err
-	}
-	if len(bytes) != 8 {
-		return 0, errors.Validation("seed must be exactly 16 hex characters")
-	}
-	return int64(binary.LittleEndian.Uint64(bytes)), nil
+func hashSeed(seed string) int64 {
+	h := fnv.New64a()
+	h.Write([]byte(seed))
+	return int64(h.Sum64())
 }
 
 func (s *Service) generateUniverse(ctx context.Context, gameID int, config GameConfig, rng *mathrand.Rand, tx *database.Tx) error {
